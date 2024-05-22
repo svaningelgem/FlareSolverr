@@ -20,6 +20,8 @@ from .core.util import start
 from .core._contradict import ContraDict  # noqa
 from .core.util import loop
 
+__version__ = "0.29rc2"
+
 __all__ = [
     "loop",
     "Browser",
