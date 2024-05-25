@@ -185,7 +185,7 @@ async def get_webdriver_nd(proxy: dict = None) -> WebDriver:
         # TO-DO: Need to check if it needs more objects, but should not be necessary
         # Nodriver already check for the chromium binary, headless is included in the config, no chromium driver needed so it's useless
         # and windows-headless is missing but was custom made for flaresolverr (have to check that)
-        driver = await nd.Browser.create(Config=options)
+        driver = await nd.Browser.create(config=options)
     except Exception as e:
         logging.error("Error creating Chrome Browser: %s" % e)
 
