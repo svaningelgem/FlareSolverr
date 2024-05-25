@@ -6,7 +6,11 @@ prometheus-client==0.17.1
 # required by undetected_chromedriver
 requests==2.31.0
 certifi==2023.7.22
+# required by undetected_chromedriver & nodriver
 websockets==11.0.3
+# required by nodriver
+deprecated==1.2.14
+mss==9.0.1
 # only required for linux and macos
 xvfbwrapper==0.2.9; platform_system != "Windows"
 # only required for windows
