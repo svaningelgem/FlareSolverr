@@ -45,7 +45,7 @@ class SessionsStorage:
         if self.exists(session_id):
             return self.sessions[session_id], False
 
-        driver = utils.get_webdriver(proxy)
+        driver = utils.get_webdriver_uc(proxy)
         created_at = datetime.now()
         session = Session(session_id, driver, created_at)
 

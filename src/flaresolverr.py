@@ -11,6 +11,7 @@ from bottle_plugins.logger_plugin import logger_plugin
 from bottle_plugins import prometheus_plugin
 from dtos import V1RequestBase
 import flaresolverr_service
+import flaresolverr_service_nd
 import utils
 
 
@@ -81,6 +82,9 @@ if __name__ == "__main__":
     server_host = os.environ.get('HOST', '0.0.0.0')
     server_port = int(os.environ.get('PORT', 8191))
 
+    # check if undetected-chromedriver or nodriver is selected
+    utils.get_driver_selection()
+
     # configure logger
     logger_format = '%(asctime)s %(levelname)-8s %(message)s'
     if log_level == 'DEBUG':
@@ -104,8 +108,12 @@ if __name__ == "__main__":
     # Get current OS for global variable
     utils.get_current_platform()
 
-    # test browser installation
-    flaresolverr_service.test_browser_installation()
+    # test browser installation for undetected-chromedriver or start temporary loop for nodriver
+    if utils.DRIVER_SELECTION == "nodriver":
+        # TO-DO: nodriver is very verbose in debug...
+        utils.nd.loop().run_until_complete(flaresolverr_service_nd.test_browser_installation_nd())
+    else:
+        flaresolverr_service.test_browser_installation_uc()
 
     # start bootle plugins
     # plugin order is important

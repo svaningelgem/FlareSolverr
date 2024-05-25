@@ -50,7 +50,7 @@ SHORT_TIMEOUT = 1
 SESSIONS_STORAGE = SessionsStorage()
 
 
-def test_browser_installation():
+def test_browser_installation_uc():
     logging.info("Testing web browser installation...")
     logging.info("Platform: " + platform.platform())
 
@@ -69,7 +69,7 @@ def test_browser_installation():
         logging.info("Chrome / Chromium major version: " + chrome_major_version)
 
     logging.info("Launching web browser...")
-    user_agent = utils.get_user_agent()
+    user_agent = utils.get_user_agent_uc()
     logging.info("FlareSolverr User-Agent: " + user_agent)
     logging.info("Test successful!")
 
@@ -78,7 +78,7 @@ def index_endpoint() -> IndexResponse:
     res = IndexResponse({})
     res.msg = "FlareSolverr is ready!"
     res.version = utils.get_flaresolverr_version()
-    res.userAgent = utils.get_user_agent()
+    res.userAgent = utils.get_user_agent_uc()
     return res
 
 
@@ -236,7 +236,7 @@ def _resolve_challenge(req: V1RequestBase, method: str) -> ChallengeResolutionT:
 
             driver = session.driver
         else:
-            driver = utils.get_webdriver(req.proxy)
+            driver = utils.get_webdriver_uc(req.proxy)
             logging.debug('New instance of webdriver has been created to perform the request')
         return func_timeout(timeout, _evil_logic, (req, driver, method))
     except FunctionTimedOut:
@@ -423,7 +423,7 @@ def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> Challenge
     challenge_res.url = driver.current_url
     challenge_res.status = 200  # todo: fix, selenium not provides this info
     challenge_res.cookies = driver.get_cookies()
-    challenge_res.userAgent = utils.get_user_agent(driver)
+    challenge_res.userAgent = utils.get_user_agent_uc(driver)
 
     if not req.returnOnlyCookies:
         challenge_res.headers = {}  # todo: fix, selenium not provides this info

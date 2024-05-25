@@ -9,8 +9,10 @@ import sys
 
 from selenium.webdriver.chrome.webdriver import WebDriver
 import undetected_chromedriver as uc
+import nodriver as nd
 
 FLARESOLVERR_VERSION = None
+DRIVER_SELECTION = None
 PLATFORM_VERSION = None
 CHROME_EXE_PATH = None
 CHROME_MAJOR_VERSION = None
@@ -38,6 +40,13 @@ def get_flaresolverr_version() -> str:
     with open(package_path) as f:
         FLARESOLVERR_VERSION = json.loads(f.read())['version']
         return FLARESOLVERR_VERSION
+
+def get_driver_selection() -> str:
+    global DRIVER_SELECTION
+    if DRIVER_SELECTION is not None:
+        return DRIVER_SELECTION
+    DRIVER_SELECTION = os.environ.get('DRIVER', 'undetected-chromedriver')
+    return DRIVER_SELECTION
 
 def get_current_platform() -> str:
     global PLATFORM_VERSION
@@ -121,9 +130,76 @@ def create_proxy_extension(proxy: dict) -> str:
     return proxy_extension_dir
 
 
-def get_webdriver(proxy: dict = None) -> WebDriver:
+async def get_webdriver_nd(proxy: dict = None) -> WebDriver:
+    logging.debug('Launching web browser with nodriver...')
+
+    options = nd.Config()
+    options.sandbox = False
+    options.add_argument('--window-size=1920,1080')
+    # todo: this param shows a warning in chrome head-full
+    options.add_argument('--disable-setuid-sandbox')
+    # this option removes the zygote sandbox (it seems that the resolution is a bit faster)
+    options.add_argument('--no-zygote')
+    # attempt to fix Docker ARM32 build
+    options.add_argument('--disable-gpu-sandbox')
+    options.add_argument('--disable-software-rasterizer')
+    options.add_argument('--ignore-certificate-errors')
+    options.add_argument('--ignore-ssl-errors')
+    # fix GL errors in ASUSTOR NAS
+    # https://github.com/FlareSolverr/FlareSolverr/issues/782
+    # https://github.com/microsoft/vscode/issues/127800#issuecomment-873342069
+    # https://peter.sh/experiments/chromium-command-line-switches/#use-gl
+    options.add_argument('--use-gl=swiftshader')
+
+    language = os.environ.get('LANG', None)
+    if language is not None:
+        options.lang = language
+
+    # Fix for Chrome 117 | https://github.com/FlareSolverr/FlareSolverr/issues/910
+    if USER_AGENT is not None:
+        options.add_argument('--user-agent=%s' % USER_AGENT)
+
+    proxy_extension_dir = None
+    if proxy and all(key in proxy for key in ['url', 'username', 'password']):
+        proxy_extension_dir = create_proxy_extension(proxy)
+        options.add_extension(os.path.abspath(proxy_extension_dir))
+    elif proxy and 'url' in proxy:
+        proxy_url = proxy['url']
+        logging.debug("Using webdriver proxy: %s", proxy_url)
+        options.add_argument('--proxy-server=%s' % proxy_url)
+
+    # note: headless mode is detected (headless = True)
+    # we launch the browser in head-full mode with the window hidden
+
+    # TO-DO: Need to check in nodriver code if this windows thing is still needed
+    windows_headless = False
+    if get_config_headless():
+        if os.name == 'nt':
+            windows_headless = True
+        else:
+            start_xvfb_display()
+    # For normal headless mode:
+    # options.headless = True or False
+
+    try:
+        # TO-DO: Need to check if it needs more objects, but should not be necessary
+        # Nodriver already check for the chromium binary, headless is included in the config, no chromium driver needed so it's useless
+        # and windows-headless is missing but was custom made for flaresolverr (have to check that)
+        driver = await nd.Browser.create(Config=options)
+    except Exception as e:
+        logging.error("Error creating Chrome Browser: %s" % e)
+
+    # clean up proxy extension directory
+    if proxy_extension_dir is not None:
+        shutil.rmtree(proxy_extension_dir)
+
+    return driver
+
+
+def get_webdriver_uc(proxy: dict = None) -> WebDriver:
     global PATCHED_DRIVER_PATH, USER_AGENT
-    logging.debug('Launching web browser...')
+    
+    logging.debug('Launching web browser with undetected-chromedriver...')
 
     # undetected_chromedriver
     options = uc.ChromeOptions()
@@ -307,14 +383,33 @@ def extract_version_nt_folder() -> str:
     return ''
 
 
-def get_user_agent(driver=None) -> str:
+async def get_user_agent_nd(driver=None) -> str:
     global USER_AGENT
     if USER_AGENT is not None:
         return USER_AGENT
 
     try:
         if driver is None:
-            driver = get_webdriver()
+            logging.info("Launching web browser...")
+            driver = await get_webdriver_nd()
+        USER_AGENT = driver.info['User-Agent']
+        # Fix for Chrome 117 | https://github.com/FlareSolverr/FlareSolverr/issues/910
+        USER_AGENT = re.sub('HEADLESS', '', USER_AGENT, flags=re.IGNORECASE)
+        return USER_AGENT
+    except Exception as e:
+        raise Exception("Error getting browser User-Agent. " + str(e))
+    finally:
+        if driver is not None:
+            driver.stop()
+
+def get_user_agent_uc(driver=None) -> str:
+    global USER_AGENT
+    if USER_AGENT is not None:
+        return USER_AGENT
+
+    try:
+        if driver is None:
+            driver = get_webdriver_uc()
         USER_AGENT = driver.execute_script("return navigator.userAgent")
         # Fix for Chrome 117 | https://github.com/FlareSolverr/FlareSolverr/issues/910
         USER_AGENT = re.sub('HEADLESS', '', USER_AGENT, flags=re.IGNORECASE)
@@ -325,7 +420,7 @@ def get_user_agent(driver=None) -> str:
         if driver is not None:
             if PLATFORM_VERSION == "nt":
                 driver.close()
-            driver.quit()
+            driver.quit()    
 
 
 def start_xvfb_display():
