@@ -10,6 +10,7 @@ services:
       - LOG_HTML=${LOG_HTML:-false}
       - CAPTCHA_SOLVER=${CAPTCHA_SOLVER:-none}
       - TZ=Europe/London
+      - DRIVER=${DRIVER:-undetected-chromedriver}
     ports:
       - "${PORT:-8191}:8191"
     restart: unless-stopped
