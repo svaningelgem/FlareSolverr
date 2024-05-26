@@ -165,7 +165,7 @@ async def get_webdriver_nd(proxy: dict = None) -> WebDriver:
         options.add_extension(os.path.abspath(proxy_extension_dir))
     elif proxy and 'url' in proxy:
         proxy_url = proxy['url']
-        logging.debug("Using webdriver proxy: %s", proxy_url)
+        logging.debug("Using proxy: %s", proxy_url)
         options.add_argument('--proxy-server=%s' % proxy_url)
 
     # note: headless mode is detected (headless = True)

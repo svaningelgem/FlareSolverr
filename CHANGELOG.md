@@ -1,5 +1,9 @@
 # Changelog
 
+## v3.4.0 (TBA)
+
+* Add nodriver support
+
 ## v3.3.19 (2024/05/23)
 * Fix occasional headless issue on Linux when set to "false"
 
