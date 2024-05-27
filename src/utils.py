@@ -181,6 +181,10 @@ async def get_webdriver_nd(proxy: dict = None) -> WebDriver:
     # For normal headless mode:
     # options.headless = True or False
 
+    # Add browser binary path for Windows
+    if PLATFORM_VERSION == "nt":
+        options.browser_executable_path = CHROME_EXE_PATH
+
     try:
         # TO-DO: Need to check if it needs more objects, but should not be necessary
         # Nodriver already check for the chromium binary, headless is included in the config, no chromium driver needed so it's useless
