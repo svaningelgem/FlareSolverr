@@ -174,7 +174,7 @@ async def get_webdriver_nd(proxy: dict = None) -> WebDriver:
     # TO-DO: Need to check in nodriver code if this windows thing is still needed
     windows_headless = False
     if get_config_headless():
-        if os.name == 'nt':
+        if PLATFORM_VERSION == 'nt':
             windows_headless = True
         else:
             start_xvfb_display()
@@ -246,7 +246,7 @@ def get_webdriver_uc(proxy: dict = None) -> WebDriver:
     # we launch the browser in head-full mode with the window hidden
     windows_headless = False
     if get_config_headless():
-        if os.name == 'nt':
+        if PLATFORM_VERSION == 'nt':
             windows_headless = True
         else:
             start_xvfb_display()
@@ -327,7 +327,7 @@ def get_chrome_major_version() -> str:
     if CHROME_MAJOR_VERSION is not None:
         return CHROME_MAJOR_VERSION
 
-    if os.name == 'nt':
+    if PLATFORM_VERSION == 'nt':
         # Example: '104.0.5112.79'
         try:
             complete_version = extract_version_nt_executable(get_chrome_exe_path())
