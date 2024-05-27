@@ -271,15 +271,17 @@ def find_chrome_executable(return_all=False):
             ]
 
     else:
+        os.environ["flaresolverr_dir"] = os.path.abspath(os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', '..'))
         for item in map(
             os.environ.get,
-            ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA", "PROGRAMW6432"),
+            ("PROGRAMFILES", "PROGRAMFILES(X86)", "LOCALAPPDATA", "PROGRAMW6432", "flaresolverr_dir"),
         ):
             if item is not None:
                 for subitem in (
                     "Google/Chrome/Application",
                     "Google/Chrome Beta/Application",
                     "Google/Chrome Canary/Application",
+                    "chrome",
                 ):
                     candidates.append(os.sep.join((item, subitem, "chrome.exe")))
     rv = []
