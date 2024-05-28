@@ -170,12 +170,11 @@ async def get_webdriver_nd(proxy: dict = None) -> WebDriver:
 
     # note: headless mode is detected (headless = True)
     # we launch the browser in head-full mode with the window hidden
-
-    # TO-DO: Need to check in nodriver code if this windows thing is still needed
-    windows_headless = False
     if get_config_headless():
         if PLATFORM_VERSION == 'nt':
-            windows_headless = True
+            # TO-DO: Windows headless works but I need to find a proper way to detect the binary
+            #        Creating a new env in nodriver/config.py works but it's ugly
+            options.windows_headless = True
         else:
             start_xvfb_display()
     # For normal headless mode:
@@ -186,9 +185,6 @@ async def get_webdriver_nd(proxy: dict = None) -> WebDriver:
         options.browser_executable_path = CHROME_EXE_PATH
 
     try:
-        # TO-DO: Need to check if it needs more objects, but should not be necessary
-        # Nodriver already check for the chromium binary, headless is included in the config, no chromium driver needed so it's useless
-        # and windows-headless is missing but was custom made for flaresolverr (have to check that)
         driver = await nd.Browser.create(config=options)
     except Exception as e:
         logging.error("Error creating Chrome Browser: %s" % e)

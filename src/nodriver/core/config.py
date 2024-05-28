@@ -39,6 +39,7 @@ class Config:
         browser_args: Optional[List[str]] = AUTO,
         sandbox: Optional[bool] = True,
         lang: Optional[str] = "en-US",
+        windows_headless: Optional[bool] = False,
         **kwargs: dict,
     ):
         """
@@ -59,6 +60,7 @@ class Config:
         :param sandbox: disables sandbox
         :param autodiscover_targets: use autodiscovery of targets
         :param lang: language string to use other than the default "en-US,en;q=0.9"
+        :param windows_headless: allow chromium window to run hidden
         :param kwargs:
 
         :type user_data_dir: PathLike
@@ -67,6 +69,7 @@ class Config:
         :type browser_args: list[str]
         :type sandbox: bool
         :type lang: str
+        :type windows_headless bool
         :type kwargs: dict
         """
 
@@ -98,6 +101,7 @@ class Config:
 
         self.autodiscover_targets = True
         self.lang = lang
+        self.windows_headless = windows_headless
 
         # other keyword args will be accessible by attribute
         self.__dict__.update(kwargs)

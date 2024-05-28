@@ -11,6 +11,7 @@ import typing
 import urllib.parse
 import urllib.request
 import warnings
+import subprocess
 from collections import defaultdict
 from typing import List, Union, Tuple
 
@@ -69,6 +70,7 @@ class Browser:
         browser_executable_path: PathLike = None,
         browser_args: List[str] = None,
         sandbox: bool = True,
+        windows_headless: bool = False,
         **kwargs,
     ) -> Browser:
         """
@@ -81,6 +83,7 @@ class Browser:
                 browser_executable_path=browser_executable_path,
                 browser_args=browser_args or [],
                 sandbox=sandbox,
+                windows_headless=windows_headless,
                 **kwargs,
             )
         instance = cls(config)
@@ -302,12 +305,17 @@ class Browser:
             )  # noqa
 
         exe = self.config.browser_executable_path
+        windows_headless = self.config.windows_headless
         params = self.config()
 
         logger.info(
             "starting\n\texecutable :%s\n\narguments:\n%s", exe, "\n\t".join(params)
         )
         if not connect_existing:
+            startupinfo = None
+            if os.name == 'nt' and windows_headless:
+                startupinfo = subprocess.STARTUPINFO()
+                startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
             self._process: asyncio.subprocess.Process = (
                 await asyncio.create_subprocess_exec(
                     # self.config.browser_executable_path,
@@ -318,6 +326,7 @@ class Browser:
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
                     close_fds=is_posix,
+                    startupinfo=startupinfo,
                 )
             )
 

@@ -31,6 +31,7 @@ async def start(
     browser_args: Optional[List[str]] = None,
     sandbox: Optional[bool] = True,
     lang: Optional[str] = None,
+    windows_headless: Optional[bool] = False,
     **kwargs: Optional[dict],
 ) -> Browser:
     """
@@ -57,6 +58,9 @@ async def start(
 
     :param lang: language string
     :type lang: str
+
+    :param windows_headless:
+    :type windows_headless: bool
     :return:
     """
     if not config:
@@ -67,6 +71,7 @@ async def start(
             browser_args,
             sandbox,
             lang,
+            windows_headless,
             **kwargs,
         )
     from .browser import Browser
