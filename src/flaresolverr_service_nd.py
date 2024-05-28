@@ -205,7 +205,7 @@ async def _evil_logic_nd(req: V1RequestBase, driver: utils.nd, method: str) -> C
     await tab.wait(5)
     await tab
     if utils.get_config_log_html():
-        logging.debug(f"Response HTML:\n{tab.get_content()}")
+        logging.debug(f"Response HTML:\n{await tab.get_content()}")
     page_title = tab.target.title
 
     # find access denied titles
