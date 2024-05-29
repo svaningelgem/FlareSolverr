@@ -3,14 +3,11 @@ import platform
 import sys
 import time
 from datetime import timedelta
-from urllib.parse import unquote
-
 from func_timeout import FunctionTimedOut, func_timeout
 
 import utils
 from dtos import (STATUS_ERROR, STATUS_OK, ChallengeResolutionResultT,
-                  ChallengeResolutionT, HealthResponse, IndexResponse,
-                  V1RequestBase, V1ResponseBase)
+                  ChallengeResolutionT, V1RequestBase, V1ResponseBase)
 # from sessions import SessionsStorage
 
 ACCESS_DENIED_TITLES = [
@@ -33,7 +30,8 @@ CHALLENGE_TITLES = [
 ]
 CHALLENGE_SELECTORS = [
     # Cloudflare
-    '#cf-challenge-running', '.ray_id', '.attack-box', '#cf-please-wait', '#challenge-spinner', '#trk_jschal_js',
+    '#cf-challenge-running', '.ray_id', '.attack-box',
+    '#cf-please-wait', '#challenge-spinner', '#trk_jschal_js',
     # Custom CloudFlare for EbookParadijs, Film-Paleis, MuziekFabriek and Puur-Hollands
     'td.info #js_info',
     # Fairlane / pararius.com
@@ -183,9 +181,10 @@ async def _evil_logic_nd(req: V1RequestBase, driver: utils.nd, method: str) -> C
         await _post_request(req, driver)
     else:
         tab = await driver.get(req.url)
-        
+
     # Add handler to watch the status code
-    tab.add_handler(utils.nd.cdp.network.ResponseReceivedExtraInfo, lambda event: get_status_code(event.status_code))
+    tab.add_handler(utils.nd.cdp.network.ResponseReceivedExtraInfo,
+                    lambda event: get_status_code(event.status_code))
 
     # set cookies if required
     # TO-DO: Need to check if that works
@@ -247,15 +246,14 @@ async def _evil_logic_nd(req: V1RequestBase, driver: utils.nd, method: str) -> C
                     logging.debug("Waiting for title (attempt " + str(attempt) + "): " + title)
                     if tab.target.title != title:
                         continue
-                    else:
-                        start_time = time.time()
-                        while True:
-                            current_title = tab.target.title
-                            if current_title not in CHALLENGE_TITLES:
-                                break
-                            elif time.time() - start_time > SHORT_TIMEOUT:
-                                raise TimeoutError
-                            await tab.wait(0.1)
+                    start_time = time.time()
+                    while True:
+                        current_title = tab.target.title
+                        if current_title not in CHALLENGE_TITLES:
+                            break
+                        if time.time() - start_time > SHORT_TIMEOUT:
+                            raise TimeoutError
+                        await tab.wait(0.1)
 
                 # then wait until all the selectors disappear
                 for selector in CHALLENGE_SELECTORS:
@@ -266,17 +264,17 @@ async def _evil_logic_nd(req: V1RequestBase, driver: utils.nd, method: str) -> C
                             element = await tab.query_selector(selector=selector)
                             if not element:
                                 break
-                            elif time.time() - start_time > SHORT_TIMEOUT:
+                            if time.time() - start_time > SHORT_TIMEOUT:
                                 raise TimeoutError
                             await tab.wait(0.1)
-                            
+
                 # all elements not found
                 break
 
             except TimeoutError:
                 logging.debug("Timeout waiting for selector")
 
-                await click_verify_nd(driver, tab)
+                await click_verify_nd(tab)
 
         # waits until cloudflare redirection ends
         logging.debug("Waiting for redirect")
@@ -305,11 +303,12 @@ async def _evil_logic_nd(req: V1RequestBase, driver: utils.nd, method: str) -> C
     res.result = challenge_res
     return res
 
-async def click_verify_nd(driver: utils.nd, tab: utils.nd):
+async def click_verify_nd(tab: utils.nd):
     try:
         logging.debug("Trying to find the closest Cloudflare clickable element...")
         await tab.wait(5)
-        cf_element = await tab.find(text="//iframe[starts-with(@id, 'cf-chl-widget-')]", timeout=SHORT_TIMEOUT)
+        cf_element = await tab.find(text="//iframe[starts-with(@id, 'cf-chl-widget-')]",
+                                    timeout=SHORT_TIMEOUT)
         if cf_element:
             # await tab.wait(2)
             await cf_element.mouse_move()

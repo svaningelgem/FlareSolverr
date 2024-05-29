@@ -5,7 +5,6 @@ import re
 import shutil
 import urllib.parse
 import tempfile
-import sys
 
 from selenium.webdriver.chrome.webdriver import WebDriver
 import undetected_chromedriver as uc
@@ -198,7 +197,7 @@ async def get_webdriver_nd(proxy: dict = None) -> WebDriver:
 
 def get_webdriver_uc(proxy: dict = None) -> WebDriver:
     global PATCHED_DRIVER_PATH, USER_AGENT
-    
+
     logging.debug('Launching web browser with undetected-chromedriver...')
 
     # undetected_chromedriver
@@ -420,7 +419,7 @@ def get_user_agent_uc(driver=None) -> str:
         if driver is not None:
             if PLATFORM_VERSION == "nt":
                 driver.close()
-            driver.quit()    
+            driver.quit()
 
 
 def start_xvfb_display():

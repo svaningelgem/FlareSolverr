@@ -53,7 +53,9 @@ def controller_v1():
     """
     req = V1RequestBase(request.json)
     if utils.DRIVER_SELECTION == "nodriver":
-        res = utils.nd.loop().run_until_complete(flaresolverr_service_nd.controller_v1_endpoint_nd(req))
+        res = utils.nd.loop().run_until_complete(
+                flaresolverr_service_nd.controller_v1_endpoint_nd(req)
+            )
     else:
         res = flaresolverr_service.controller_v1_endpoint(req)
     if res.__error_500__:
@@ -118,7 +120,9 @@ if __name__ == "__main__":
 
     # test browser installation for undetected-chromedriver or start temporary loop for nodriver
     if utils.DRIVER_SELECTION == "nodriver":
-        utils.nd.loop().run_until_complete(flaresolverr_service_nd.test_browser_installation_nd())
+        utils.nd.loop().run_until_complete(
+            flaresolverr_service_nd.test_browser_installation_nd()
+        )
     else:
         flaresolverr_service.test_browser_installation_uc()
 
