@@ -298,7 +298,7 @@ async def _evil_logic_nd(req: V1RequestBase, driver: utils.nd, method: str) -> C
 
     if not req.returnOnlyCookies:
         challenge_res.headers = {}  # TO-DO: nodriver should support this, let's add it later
-        challenge_res.response = tab.get_content
+        challenge_res.response = await tab.get_content()
 
     res.result = challenge_res
     return res
