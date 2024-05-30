@@ -6,6 +6,7 @@ prometheus-client==0.17.1
 # required by undetected_chromedriver
 requests==2.31.0
 certifi==2023.7.22
+packaging==24.0
 # required by undetected_chromedriver & nodriver
 websockets==11.0.3
 # required by nodriver

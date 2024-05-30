@@ -89,7 +89,7 @@ This is the recommended way for Windows users.
 > **Warning**
 > Installing from source code only works for x64 architecture. For other architectures see Docker images.
 
-* Install [Python 3.11](https://www.python.org/downloads/).
+* Install [Python 3.12](https://www.python.org/downloads/).
 * Install [Chrome](https://www.google.com/intl/en_us/chrome/) (all OS) or [Chromium](https://www.chromium.org/getting-involved/download-chromium/) (just Linux, it doesn't work in Windows) web browser.
 * (Only in Linux) Install [Xvfb](https://en.wikipedia.org/wiki/Xvfb) package.
 * (Only in macOS) Install [XQuartz](https://www.xquartz.org/) package.
