@@ -3,6 +3,7 @@ import platform
 import sys
 import time
 from datetime import timedelta
+from urllib.parse import unquote
 from func_timeout import FunctionTimedOut, func_timeout
 
 import utils
@@ -135,6 +136,22 @@ async def _cmd_request_get_nd(req: V1RequestBase) -> V1ResponseBase:
     res.solution = challenge_res.result
     return res
 
+async def _cmd_request_post_nd(req: V1RequestBase) -> V1ResponseBase:
+    # do some validations
+    if req.postData is None:
+        raise Exception("Request parameter 'postData' is mandatory in 'request.post' command.")
+    if req.returnRawHtml is not None:
+        logging.warning("Request parameter 'returnRawHtml' was removed in FlareSolverr v2.")
+    if req.download is not None:
+        logging.warning("Request parameter 'download' was removed in FlareSolverr v2.")
+
+    challenge_res = await _resolve_challenge_nd(req, 'POST')
+    res = V1ResponseBase({})
+    res.status = challenge_res.status
+    res.message = challenge_res.message
+    res.solution = challenge_res.result
+    return res
+
 async def _resolve_challenge_nd(req: V1RequestBase, method: str) -> ChallengeResolutionT:
     timeout = req.maxTimeout / 1000
     driver = None
@@ -178,7 +195,8 @@ async def _evil_logic_nd(req: V1RequestBase, driver: utils.nd, method: str) -> C
     # navigate to the page
     logging.debug(f'Navigating to... {req.url}')
     if method == 'POST':
-        await _post_request(req, driver)
+        post_content = await _post_request_nd(req)
+        tab = await driver.get("data:text/html;charset=utf-8," + post_content)
     else:
         tab = await driver.get(req.url)
 
@@ -196,12 +214,13 @@ async def _evil_logic_nd(req: V1RequestBase, driver: utils.nd, method: str) -> C
             await driver.cookies.set_all(cookie)
         # reload the page
         if method == 'POST':
-            _post_request(req, driver)
+            await tab.close()
+            tab = await driver.get(post_content)
         else:
             await tab.reload()
 
-    # wait for the page
-    await tab.wait(5)
+    # wait for the page and make sure it catches the load event
+    await tab.wait(2)
     await tab
     if utils.get_config_log_html():
         logging.debug(f"Response HTML:\n{await tab.get_content()}")
@@ -306,7 +325,7 @@ async def _evil_logic_nd(req: V1RequestBase, driver: utils.nd, method: str) -> C
 async def click_verify_nd(tab: utils.nd):
     try:
         logging.debug("Trying to find the closest Cloudflare clickable element...")
-        await tab.wait(5)
+        await tab.wait(2)
         cf_element = await tab.find(text="//iframe[starts-with(@id, 'cf-chl-widget-')]",
                                     timeout=SHORT_TIMEOUT)
         if cf_element:
@@ -332,3 +351,36 @@ async def click_verify_nd(tab: utils.nd):
     #     logging.debug("The Cloudflare 'Verify you are human' button not found on the page.")
 
     time.sleep(2)
+
+async def _post_request_nd(req: V1RequestBase) -> str:
+    post_form = f'<form id="hackForm" action="{req.url}" method="POST">'
+    logging.debug(f"POST DATA: {req.postData}")
+    query_string = req.postData if req.postData[0] != '?' else req.postData[1:]
+    logging.debug(f"QUERY STRING: {query_string}")
+    pairs = query_string.split('&')
+    for pair in pairs:
+        parts = pair.split('=')
+        # noinspection PyBroadException
+        try:
+            name = unquote(parts[0])
+        except Exception:
+            name = parts[0]
+        if name == 'submit':
+            continue
+        # noinspection PyBroadException
+        try:
+            value = unquote(parts[1])
+        except Exception:
+            value = parts[1]
+        post_form += f'<input type="text" name="{name}" value="{value}"><br>'
+    post_form += '</form>'
+    html_content = f"""
+        <!DOCTYPE html>
+        <html>
+        <body>
+            {post_form}
+            <script>document.getElementById('hackForm').submit();</script>
+        </body>
+        </html>"""
+
+    return html_content
