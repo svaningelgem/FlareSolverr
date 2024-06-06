@@ -2,9 +2,9 @@ import logging
 import platform
 import sys
 import time
+import asyncio
 from datetime import timedelta
 from urllib.parse import unquote
-from func_timeout import FunctionTimedOut, func_timeout
 from nodriver import Browser, Tab
 from sessions_nd import SessionsStorage
 
@@ -219,8 +219,8 @@ async def _resolve_challenge_nd(req: V1RequestBase, method: str) -> ChallengeRes
         else:
             driver = await utils.get_webdriver_nd(req.proxy)
             logging.debug('New instance of chromium has been created to perform the request')
-        return await func_timeout(timeout, _evil_logic_nd, (req, driver, method))
-    except FunctionTimedOut:
+        return await asyncio.wait_for(_evil_logic_nd(req, driver, method), timeout=timeout)
+    except TimeoutError:
         raise Exception(f'Error solving the challenge. Timeout after {timeout} seconds.')
     except Exception as e:
         raise Exception('Error solving the challenge. ' + str(e).replace('\n', '\\n'))
