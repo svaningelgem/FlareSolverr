@@ -27,14 +27,14 @@ class SessionsStorage:
 
     async def create(self, session_id: Optional[str] = None, proxy: Optional[dict] = None,
                force_new: Optional[bool] = False) -> Tuple[Session, bool]:
-        """create creates new instance of WebDriver if necessary,
+        """create new instance of Browser if necessary,
         assign defined (or newly generated) session_id to the instance
         and returns the session object. If a new session has been created
         second argument is set to True.
 
-        Note: The function is idempotent, so in case if session_id
-        already exists in the storage a new instance of WebDriver won't be created
-        and existing session will be returned. Second argument defines if 
+        Note: The function is idempotent, so if session_id
+        already exists in the storage, a new instance of WebDriver won't be created
+        and existing session will be returned. Second argument defines if
         new session has been created (True) or an existing one was used (False).
         """
         session_id = session_id or str(uuid1())
@@ -57,7 +57,7 @@ class SessionsStorage:
         return session_id in self.sessions
 
     async def destroy(self, session_id: str) -> bool:
-        """destroy closes the driver instance and removes session from the storage.
+        """destroy closes the Browser instance and removes session from the storage.
         The function is noop if session_id doesn't exist.
         The function returns True if session was found and destroyed,
         and False if session_id wasn't found.
