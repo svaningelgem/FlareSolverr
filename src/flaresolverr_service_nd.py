@@ -5,6 +5,8 @@ import time
 from datetime import timedelta
 from urllib.parse import unquote
 from func_timeout import FunctionTimedOut, func_timeout
+from nodriver import Browser, Tab
+from sessions_nd import SessionsStorage
 
 import utils
 from dtos import (STATUS_ERROR, STATUS_OK, ChallengeResolutionResultT,
@@ -40,10 +42,14 @@ CHALLENGE_SELECTORS = [
 ]
 STATUS_CODE = None
 SHORT_TIMEOUT = 2
-# SESSIONS_STORAGE = SessionsStorage()
+SESSIONS_STORAGE = SessionsStorage()
 
 # TO-DO: See if still necessary. Keeping it for now but nodriver already checks for chromium binaries
 #        and exit if no candidate is available
+#
+#        This also creates a parent process that keeps running
+#        Killing it manually doesn't do anything harmful and 
+#        every other process are closed normally leaving no zombie process
 async def test_browser_installation_nd():
     logging.info("Testing web browser installation...")
     logging.info("Platform: " + platform.platform())
@@ -106,7 +112,7 @@ async def _controller_v1_handler_nd(req: V1RequestBase) -> V1ResponseBase:
     if req.cmd == 'sessions.create':
         res = await _cmd_sessions_create_nd(req)
     elif req.cmd == 'sessions.list':
-        res = await _cmd_sessions_list_nd(req)
+        res = _cmd_sessions_list_nd()
     elif req.cmd == 'sessions.destroy':
         res = await _cmd_sessions_destroy_nd(req)
     elif req.cmd == 'request.get':
@@ -152,6 +158,48 @@ async def _cmd_request_post_nd(req: V1RequestBase) -> V1ResponseBase:
     res.solution = challenge_res.result
     return res
 
+async def _cmd_sessions_create_nd(req: V1RequestBase) -> V1ResponseBase:
+    logging.debug("Creating new session...")
+
+    session, fresh = await SESSIONS_STORAGE.create(session_id=req.session, proxy=req.proxy)
+    session_id = session.session_id
+
+    if not fresh:
+        return V1ResponseBase({
+            "status": STATUS_OK,
+            "message": "Session already exists.",
+            "session": session_id
+        })
+
+    return V1ResponseBase({
+        "status": STATUS_OK,
+        "message": "Session created successfully.",
+        "session": session_id
+    })
+
+
+def _cmd_sessions_list_nd() -> V1ResponseBase:
+    session_ids = SESSIONS_STORAGE.session_ids()
+
+    return V1ResponseBase({
+        "status": STATUS_OK,
+        "message": "",
+        "sessions": session_ids
+    })
+
+
+async def _cmd_sessions_destroy_nd(req: V1RequestBase) -> V1ResponseBase:
+    session_id = req.session
+    existed = await SESSIONS_STORAGE.destroy(session_id)
+
+    if not existed:
+        raise Exception("The session doesn't exist.")
+
+    return V1ResponseBase({
+        "status": STATUS_OK,
+        "message": "The session has been removed."
+    })
+
 async def _resolve_challenge_nd(req: V1RequestBase, method: str) -> ChallengeResolutionT:
     timeout = req.maxTimeout / 1000
     driver = None
@@ -159,7 +207,7 @@ async def _resolve_challenge_nd(req: V1RequestBase, method: str) -> ChallengeRes
         if req.session:
             session_id = req.session
             ttl = timedelta(minutes=req.session_ttl_minutes) if req.session_ttl_minutes else None
-            session, fresh = SESSIONS_STORAGE.get(session_id, ttl)
+            session, fresh = await SESSIONS_STORAGE.get(session_id, ttl)
 
             if fresh:
                 logging.debug(f"new session created to perform the request (session_id={session_id})")
@@ -187,7 +235,7 @@ def get_status_code(event):
     STATUS_CODE = event
     # logging.debug("Current network request status code: %s" % STATUS_CODE)
 
-async def _evil_logic_nd(req: V1RequestBase, driver: utils.nd, method: str) -> ChallengeResolutionT:
+async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> ChallengeResolutionT:
     res = ChallengeResolutionT({})
     res.status = STATUS_OK
     res.message = ""
@@ -220,7 +268,7 @@ async def _evil_logic_nd(req: V1RequestBase, driver: utils.nd, method: str) -> C
             await tab.reload()
 
     # wait for the page and make sure it catches the load event
-    await tab.wait(2)
+    await tab.wait(1)
     await tab
     if utils.get_config_log_html():
         logging.debug(f"Response HTML:\n{await tab.get_content()}")
@@ -319,10 +367,19 @@ async def _evil_logic_nd(req: V1RequestBase, driver: utils.nd, method: str) -> C
         challenge_res.headers = {}  # TO-DO: nodriver should support this, let's add it later
         challenge_res.response = await tab.get_content()
 
+    # Close websocket connection
+    # to reuse the driver tab
+    #
+    # TO-DO: Need to fix
+    # ERROR Task was destroyed but it is pending!
+    # task: <Task pending name='Task-39' coro=<Connection.aclose() running at FlareSolverr/src/nodriver/core/connection.py:313>>
+    if req.session:
+        await tab.aclose()
+
     res.result = challenge_res
     return res
 
-async def click_verify_nd(tab: utils.nd):
+async def click_verify_nd(tab: Tab):
     try:
         logging.debug("Trying to find the closest Cloudflare clickable element...")
         await tab.wait(2)
