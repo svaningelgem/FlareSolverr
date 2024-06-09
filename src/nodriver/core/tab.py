@@ -881,13 +881,23 @@ class Tab(Connection):
         )
         return window_id, bounds
 
-    async def get_content(self):
+    async def get_content(
+        self,
+        _node: Optional[Union[cdp.dom.Node, element.Element]] = None
+    ):
         """
         gets the current page source content (html)
+        :param _node:
+        :type _node:
         :return:
         :rtype:
         """
-        doc: cdp.dom.Node = await self.send(cdp.dom.get_document(-1, True))
+        if not _node:
+            doc: cdp.dom.Node = await self.send(cdp.dom.get_document(-1, True))
+        else:
+            doc = _node
+            if _node.node_name == "IFRAME":
+                doc = _node.content_document
         return await self.send(
             cdp.dom.get_outer_html(backend_node_id=doc.backend_node_id)
         )
