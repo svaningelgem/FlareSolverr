@@ -67,6 +67,7 @@ class SessionsStorage:
 
         session = self.sessions.pop(session_id)
         session.driver.stop()
+        await utils.kill_zombie_chromium_processes()
         return True
 
     async def get(self, session_id: str, ttl: Optional[timedelta] = None) -> Tuple[Session, bool]:

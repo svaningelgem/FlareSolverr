@@ -227,6 +227,8 @@ async def _resolve_challenge_nd(req: V1RequestBase, method: str) -> ChallengeRes
     finally:
         if not req.session and driver is not None:
             driver.stop()
+            await utils.kill_zombie_chromium_processes()
+            utils.nd.util.deconstruct_browser()
             logging.debug('A used instance of chromium has been destroyed')
 
 def get_status_code(event):
@@ -249,8 +251,8 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
         tab = await driver.get(req.url)
 
     # Add handler to watch the status code
-    tab.add_handler(utils.nd.cdp.network.ResponseReceivedExtraInfo,
-                    lambda event: get_status_code(event.status_code))
+    # tab.add_handler(utils.nd.cdp.network.ResponseReceivedExtraInfo,
+    #                 lambda event: get_status_code(event.status_code))
 
     # set cookies if required
     # TO-DO: Need to check if that works
@@ -273,6 +275,7 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
     if utils.get_config_log_html():
         logging.debug(f"Response HTML:\n{await tab.get_content()}")
     page_title = tab.target.title
+    doc: utils.nd.cdp.dom.Node = await tab.send(utils.nd.cdp.dom.get_document(-1, True))
 
     # find access denied titles
     for title in ACCESS_DENIED_TITLES:
@@ -281,7 +284,7 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
                             'Probably your IP is banned for this site, check in your web browser.')
     # find access denied selectors
     for selector in ACCESS_DENIED_SELECTORS:
-        found_elements = await tab.query_selector(selector=selector)
+        found_elements = await tab.query_selector(selector=selector, _node=doc)
         if found_elements is not None:
             raise Exception('Cloudflare has blocked this request. '
                             'Probably your IP is banned for this site, check in your web browser.')
@@ -296,7 +299,7 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
     if not challenge_found:
         # find challenge by selectors
         for selector in CHALLENGE_SELECTORS:
-            found_elements = await tab.query_selector(selector=selector)
+            found_elements = await tab.query_selector(selector=selector, _node=doc)
             if found_elements is not None:
                 challenge_found = True
                 logging.info("Challenge detected. Selector found: " + selector)
@@ -324,11 +327,12 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
 
                 # then wait until all the selectors disappear
                 for selector in CHALLENGE_SELECTORS:
+                    await tab
                     logging.debug("Waiting for selector (attempt " + str(attempt) + "): " + selector)
-                    if await tab.query_selector(selector=selector) is not None:
+                    if await tab.query_selector(selector=selector, _node=doc) is not None:
                         start_time = time.time()
                         while True:
-                            element = await tab.query_selector(selector=selector)
+                            element = await tab.query_selector(selector=selector, _node=doc)
                             if not element:
                                 break
                             if time.time() - start_time > SHORT_TIMEOUT:
@@ -375,6 +379,9 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
     # task: <Task pending name='Task-39' coro=<Connection.aclose() running at FlareSolverr/src/nodriver/core/connection.py:313>>
     if req.session:
         await tab.aclose()
+    else:
+        await tab.close()
+        logging.debug("Tab was closed")
 
     res.result = challenge_res
     return res

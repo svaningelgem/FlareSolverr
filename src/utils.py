@@ -5,6 +5,8 @@ import re
 import shutil
 import urllib.parse
 import tempfile
+import asyncio
+import psutil
 
 from selenium.webdriver.chrome.webdriver import WebDriver
 import undetected_chromedriver as uc
@@ -400,6 +402,9 @@ async def get_user_agent_nd(driver=None) -> str:
     finally:
         if driver is not None:
             driver.stop()
+            await kill_zombie_chromium_processes()
+            nd.util.deconstruct_browser()
+
 
 def get_user_agent_uc(driver=None) -> str:
     global USER_AGENT
@@ -420,6 +425,34 @@ def get_user_agent_uc(driver=None) -> str:
             if PLATFORM_VERSION == "nt":
                 driver.close()
             driver.quit()
+
+
+async def kill_zombie_chromium_processes():
+    # TO-DO: Works but show websocket error on Windows
+    #        Related to aclose
+    while True:
+        found_chromium = False
+        for proc in psutil.process_iter(['pid', 'name', 'status', 'cmdline']):
+            try:
+                if any(name in proc.info['name'].lower() for name in ('chromium', 'chrome')):
+                    cmdline = proc.info.get('cmdline', [])
+                    if cmdline:
+                        if any(arg in cmdline for arg in ['--user-agent', '--no-zygote']):
+                            logging.debug(f"Terminating Chromium process with PID: {proc.info['pid']}")
+                            proc.terminate()
+                            found_chromium = True
+                    elif proc.info['status'] == 'zombie':
+                        logging.debug(f"Terminating zombie Chromium process with PID: {proc.info['pid']}")
+                        try:
+                            proc.terminate()
+                        except psutil.NoSuchProcess:
+                            pass
+                        found_chromium = True
+            except (psutil.NoSuchProcess, psutil.AccessDenied):
+                pass
+        if not found_chromium:
+            break
+        await asyncio.sleep(1)
 
 
 def start_xvfb_display():
