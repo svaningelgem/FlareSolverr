@@ -143,7 +143,7 @@ def deconstruct_browser():
                     break
                 time.sleep(0.15)
                 continue
-        print("successfully removed temp profile %s" % _.config.user_data_dir)
+        logger.debug("successfully removed temp profile %s" % _.config.user_data_dir)
 
 
 def filter_recurse_all(
