@@ -1,5 +1,7 @@
 FROM python:3.11-slim-bookworm as builder
 
+COPY requirements.txt .
+
 # Build dummy packages to skip installing them and their dependencies
 RUN apt-get update \
     && apt-get install -y --no-install-recommends equivs \
@@ -10,12 +12,15 @@ RUN apt-get update \
     && equivs-control adwaita-icon-theme \
     && printf 'Section: misc\nPriority: optional\nStandards-Version: 3.9.2\nPackage: adwaita-icon-theme\nVersion: 99.0.0\nDescription: Dummy package for adwaita-icon-theme\n' >> adwaita-icon-theme \
     && equivs-build adwaita-icon-theme \
-    && mv adwaita-icon-theme_*.deb /adwaita-icon-theme.deb
+    && mv adwaita-icon-theme_*.deb /adwaita-icon-theme.deb \
+    && apt-get install -y --no-install-recommends gcc python3-dev \
+    && pip install --no-cache-dir -r requirements.txt
 
 FROM python:3.11-slim-bookworm
 
 # Copy dummy packages
 COPY --from=builder /*.deb /
+COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
 
 # Install dependencies and create flaresolverr user
 # You can test Chromium running this command inside the container:
@@ -41,10 +46,10 @@ RUN dpkg -i /libgl1-mesa-dri.deb \
     && chown -R flaresolverr:flaresolverr .
 
 # Install Python dependencies
-COPY requirements.txt .
-RUN pip install -r requirements.txt \
-    # Remove temporary files
-    && rm -rf /root/.cache
+# COPY requirements.txt .
+# RUN pip install -r requirements.txt \
+#     # Remove temporary files
+#     && rm -rf /root/.cache
 
 USER flaresolverr
 
