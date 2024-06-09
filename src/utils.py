@@ -402,8 +402,7 @@ async def get_user_agent_nd(driver=None) -> str:
     finally:
         if driver is not None:
             driver.stop()
-            await kill_zombie_chromium_processes()
-            nd.util.deconstruct_browser()
+            await kill_chromium_processes(driver=driver)
 
 
 def get_user_agent_uc(driver=None) -> str:
@@ -427,27 +426,22 @@ def get_user_agent_uc(driver=None) -> str:
             driver.quit()
 
 
-async def kill_zombie_chromium_processes():
+async def kill_chromium_processes(driver: nd.Browser):
     # TO-DO: Works but show websocket error on Windows
     #        Related to aclose
+    process = driver.get_process
     while True:
         found_chromium = False
-        for proc in psutil.process_iter(['pid', 'name', 'status', 'cmdline']):
+        for proc in psutil.process_iter(['pid', 'status']):
             try:
-                if any(name in proc.info['name'].lower() for name in ('chromium', 'chrome')):
-                    cmdline = proc.info.get('cmdline', [])
-                    if cmdline:
-                        if any(arg in cmdline for arg in ['--user-agent', '--no-zygote']):
-                            logging.debug(f"Terminating Chromium process with PID: {proc.info['pid']}")
-                            proc.terminate()
-                            found_chromium = True
-                    elif proc.info['status'] == 'zombie':
-                        logging.debug(f"Terminating zombie Chromium process with PID: {proc.info['pid']}")
-                        try:
-                            proc.terminate()
-                        except psutil.NoSuchProcess:
-                            pass
-                        found_chromium = True
+                if proc.info['pid'] == process.pid:
+                    logging.debug(f"Terminating Chromium process with PID: {proc.info['pid']}")
+                    proc.terminate()
+                    found_chromium = True
+                elif proc.info['status'] == 'zombie':
+                    logging.debug(f"Terminating zombie Chromium process with PID: {proc.info['pid']}")
+                    proc.terminate()
+                    found_chromium = True
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 pass
         if not found_chromium:

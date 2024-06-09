@@ -227,8 +227,7 @@ async def _resolve_challenge_nd(req: V1RequestBase, method: str) -> ChallengeRes
     finally:
         if not req.session and driver is not None:
             driver.stop()
-            await utils.kill_zombie_chromium_processes()
-            utils.nd.util.deconstruct_browser()
+            await utils.kill_chromium_processes(driver=driver)
             logging.debug('A used instance of chromium has been destroyed')
 
 def get_status_code(event):

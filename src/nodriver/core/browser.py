@@ -149,6 +149,13 @@ class Browser:
         return True
         # return (self._process and self._process.returncode) or False
 
+    @property
+    def get_process(self) -> Browser._process:
+        """
+        Return current Browser instance process
+        """
+        return self._process
+
     async def wait(self, time: Union[float, int] = 1) -> Browser:
         """wait for <time> seconds. important to use, especially in between page navigation
 
