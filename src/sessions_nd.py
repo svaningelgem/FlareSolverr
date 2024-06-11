@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
@@ -66,8 +67,13 @@ class SessionsStorage:
             return False
 
         session = self.sessions.pop(session_id)
+        await session.driver.connection.aclose()
+        if utils.PLATFORM_VERSION == "nt":
+            await asyncio.sleep(2)
         session.driver.stop()
-        await utils.kill_chromium_processes(driver=session.driver)
+        if utils.PLATFORM_VERSION == "nt":
+            await asyncio.sleep(2)
+        await utils.after_run_cleanup(driver=session.driver)
         return True
 
     async def get(self, session_id: str, ttl: Optional[timedelta] = None) -> Tuple[Session, bool]:

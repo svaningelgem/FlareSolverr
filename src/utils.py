@@ -401,8 +401,13 @@ async def get_user_agent_nd(driver=None) -> str:
         raise Exception("Error getting browser User-Agent. " + str(e))
     finally:
         if driver is not None:
+            await driver.connection.aclose()
+            if PLATFORM_VERSION == "nt":
+                await asyncio.sleep(2)
             driver.stop()
-            await kill_chromium_processes(driver=driver)
+            if PLATFORM_VERSION == "nt":
+                await asyncio.sleep(2)
+            await after_run_cleanup(driver=driver)
 
 
 def get_user_agent_uc(driver=None) -> str:
@@ -426,12 +431,13 @@ def get_user_agent_uc(driver=None) -> str:
             driver.quit()
 
 
-async def kill_chromium_processes(driver: nd.Browser):
-    # TO-DO: Works but show websocket error on Windows
-    #        Related to aclose
+async def after_run_cleanup(driver: nd.Browser):
+    # Browser processes
     process = driver.get_process
     while True:
         found_chromium = False
+        if process is None:
+            break
         for proc in psutil.process_iter(['pid', 'status']):
             try:
                 if proc.info['pid'] == process.pid:
@@ -448,6 +454,19 @@ async def kill_chromium_processes(driver: nd.Browser):
             break
         await asyncio.sleep(1)
 
+    # Browser user data dir
+    try:
+        user_dir = driver.config.user_data_dir
+        shutil.rmtree(user_dir, ignore_errors=False)
+        logging.debug(f"Removed Browser user data directory {user_dir}")
+    except OSError as e:
+        logging.debug(f"Failed to delete Browser user data directory {user_dir} - {str(e)}")
+
+    # Remove Browser instance from created instances
+    try:
+        nd.util.get_registered_instances().remove(driver)
+    except Exception as e:
+        logging.debug(f"Error when removing the Browser instance: {str(e)}")
 
 def start_xvfb_display():
     global XVFB_DISPLAY
