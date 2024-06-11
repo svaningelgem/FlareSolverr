@@ -276,14 +276,6 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
     # wait for the page and make sure it catches the load event
     await tab.wait(1)
     await tab
-
-    try:
-        await tab.find(text="//iframe[starts-with(@id, 'cf-chl-widget-')]",
-                       timeout=10
-        )
-    except TimeoutError:
-        raise TimeoutError("Couldn't find the cloudflare element...")
-
     doc: utils.nd.cdp.dom.Node = await tab.send(utils.nd.cdp.dom.get_document(-1, True))
 
     if utils.get_config_log_html():
