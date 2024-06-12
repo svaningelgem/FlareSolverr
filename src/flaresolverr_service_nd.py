@@ -4,7 +4,8 @@ import sys
 import time
 import asyncio
 from datetime import timedelta
-from urllib.parse import unquote
+from urllib.parse import unquote, urlparse
+from typing import List
 from nodriver import Browser, Tab
 from sessions_nd import SessionsStorage
 
@@ -46,10 +47,6 @@ SESSIONS_STORAGE = SessionsStorage()
 
 # TO-DO: See if still necessary. Keeping it for now but nodriver already checks for chromium binaries
 #        and exit if no candidate is available
-#
-#        This also creates a parent process that keeps running
-#        Killing it manually doesn't do anything harmful and 
-#        every other process are closed normally leaving no zombie process
 async def test_browser_installation_nd():
     logging.info("Testing web browser installation...")
     logging.info("Platform: " + platform.platform())
@@ -258,19 +255,37 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
     # tab.add_handler(utils.nd.cdp.network.ResponseReceivedExtraInfo,
     #                 lambda event: get_status_code(event.status_code))
 
-    # set cookies if required
-    # TO-DO: Need to check if that works
+    # Insert cookies in Browser if set
     if req.cookies is not None and len(req.cookies) > 0:
+        await tab.wait(1)
+        await tab
         logging.debug(f'Setting cookies...')
+
+        # Get cleaned domain
+        domain = (urlparse(req.url).netloc).split(".")
+        domain = ".".join(domain[-2:])
+        # domain = ".".join(urlparse(req.url).netloc.split(".")[-2:])
+
+        # Delete all cookies
+        logging.debug("Remove all Browser cookies...")
+        await driver.cookies.clear()
+
+        cookies: List[utils.nd.cdp.network.CookieParam] = []
         for cookie in req.cookies:
-            # Delete all cookies if any
-            await driver.cookies.clear()
-            await driver.cookies.set_all(cookie)
+            cookies.append(utils.nd.cdp.network.CookieParam(
+                name=cookie["name"],
+                value=cookie["value"],
+                path="/",
+                domain=domain
+            ))
+
+        await driver.cookies.set_all(cookies)
+
         # reload the page
         if method == 'POST':
-            await tab.close()
             tab = await driver.get(post_content)
         else:
+            logging.debug("Reloading tab...")
             await tab.reload()
 
     # wait for the page and make sure it catches the load event
@@ -378,10 +393,6 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
 
     # Close websocket connection
     # to reuse the driver tab
-    #
-    # TO-DO: Need to fix
-    # ERROR Task was destroyed but it is pending!
-    # task: <Task pending name='Task-39' coro=<Connection.aclose() running at FlareSolverr/src/nodriver/core/connection.py:313>>
     if req.session:
         await tab.aclose()
     else:

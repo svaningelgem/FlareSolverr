@@ -173,8 +173,6 @@ async def get_webdriver_nd(proxy: dict = None) -> WebDriver:
     # we launch the browser in head-full mode with the window hidden
     if get_config_headless():
         if PLATFORM_VERSION == 'nt':
-            # TO-DO: Windows headless works but I need to find a proper way to detect the binary
-            #        Creating a new env in nodriver/config.py works but it's ugly
             options.windows_headless = True
         else:
             start_xvfb_display()
