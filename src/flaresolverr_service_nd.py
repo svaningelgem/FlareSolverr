@@ -223,12 +223,6 @@ async def _resolve_challenge_nd(req: V1RequestBase, method: str) -> ChallengeRes
         raise Exception('Error solving the challenge. ' + str(e).replace('\n', '\\n'))
     finally:
         if not req.session and driver is not None:
-            await driver.connection.aclose()
-            if utils.PLATFORM_VERSION == "nt":
-                await asyncio.sleep(2)
-            driver.stop()
-            if utils.PLATFORM_VERSION == "nt":
-                await asyncio.sleep(2)
             await utils.after_run_cleanup(driver=driver)
             logging.debug('A used instance of chromium has been destroyed')
 
@@ -264,7 +258,6 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
         # Get cleaned domain
         domain = (urlparse(req.url).netloc).split(".")
         domain = ".".join(domain[-2:])
-        # domain = ".".join(urlparse(req.url).netloc.split(".")[-2:])
 
         # Delete all cookies
         logging.debug("Remove all Browser cookies...")
@@ -434,9 +427,7 @@ async def click_verify_nd(tab: Tab):
 
 async def _post_request_nd(req: V1RequestBase) -> str:
     post_form = f'<form id="hackForm" action="{req.url}" method="POST">'
-    logging.debug(f"POST DATA: {req.postData}")
     query_string = req.postData if req.postData[0] != '?' else req.postData[1:]
-    logging.debug(f"QUERY STRING: {query_string}")
     pairs = query_string.split('&')
     for pair in pairs:
         parts = pair.split('=')

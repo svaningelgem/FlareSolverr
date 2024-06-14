@@ -131,7 +131,7 @@ def create_proxy_extension(proxy: dict) -> str:
     return proxy_extension_dir
 
 
-async def get_webdriver_nd(proxy: dict = None) -> WebDriver:
+async def get_webdriver_nd(proxy: dict = None) -> nd.Browser:
     logging.debug('Launching web browser with nodriver...')
 
     options = nd.Config()
@@ -399,12 +399,6 @@ async def get_user_agent_nd(driver=None) -> str:
         raise Exception("Error getting browser User-Agent. " + str(e))
     finally:
         if driver is not None:
-            await driver.connection.aclose()
-            if PLATFORM_VERSION == "nt":
-                await asyncio.sleep(2)
-            driver.stop()
-            if PLATFORM_VERSION == "nt":
-                await asyncio.sleep(2)
             await after_run_cleanup(driver=driver)
 
 
@@ -430,29 +424,55 @@ def get_user_agent_uc(driver=None) -> str:
 
 
 async def after_run_cleanup(driver: nd.Browser):
-    # Browser processes
-    process = driver.get_process
-    while True:
-        found_chromium = False
-        if process is None:
-            break
-        for proc in psutil.process_iter(['pid', 'status']):
-            try:
-                if proc.info['pid'] == process.pid:
-                    logging.debug(f"Terminating Chromium process with PID: {proc.info['pid']}")
-                    proc.terminate()
-                    found_chromium = True
-                elif proc.info['status'] == 'zombie':
-                    logging.debug(f"Terminating zombie Chromium process with PID: {proc.info['pid']}")
-                    proc.terminate()
-                    found_chromium = True
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
-        if not found_chromium:
-            break
-        await asyncio.sleep(1)
+    """
+    After run function to remove Chromium processes and delete the
+    the Browser instance data dir if necessary.
+    """
 
-    # Browser user data dir
+    # Get Browser instance process
+    process = driver.get_process
+    if process is None:
+        return
+
+    # Get the list of child processes before closing the Browser instance
+    child_processes = psutil.Process(process.pid).children(recursive=True)
+
+    # Stop Browser instance
+    driver.stop()
+
+    # Wait for the websocket to return True (Closed)
+    while True:
+        websocket_status = driver.connection.closed
+        logging.debug(f"Websocket status: {websocket_status}")
+        if websocket_status:
+            break
+        await asyncio.sleep(0.1)
+
+    # Find all chromium processes and terminate them if any
+    for proc in child_processes:
+        try:
+            if proc.pid == process.pid:
+                logging.debug(f"Terminating Chromium process with PID: {proc.pid}")
+                proc.terminate()
+            elif any(name in proc.name().lower() for name in ("chromium", "chrome")):
+                logging.debug(f"Terminating Chromium child process with PID: {proc.pid}")
+                proc.terminate()
+            elif proc.status() == 'zombie':
+                logging.debug(f"Terminating zombie Chromium process with PID: {proc.pid}")
+                proc.terminate()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
+
+    # Wait for all processes to terminate
+    for proc in child_processes:
+        try:
+            if proc.pid == process.pid or \
+            any(name in proc.name().lower() for name in ("chromium", "chrome")):
+                proc.wait(timeout=10)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
+
+    # Delete Browser instance data dir
     try:
         user_dir = driver.config.user_data_dir
         shutil.rmtree(user_dir, ignore_errors=False)

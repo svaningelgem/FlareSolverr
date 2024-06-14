@@ -67,12 +67,6 @@ class SessionsStorage:
             return False
 
         session = self.sessions.pop(session_id)
-        await session.driver.connection.aclose()
-        if utils.PLATFORM_VERSION == "nt":
-            await asyncio.sleep(2)
-        session.driver.stop()
-        if utils.PLATFORM_VERSION == "nt":
-            await asyncio.sleep(2)
         await utils.after_run_cleanup(driver=session.driver)
         return True
 
