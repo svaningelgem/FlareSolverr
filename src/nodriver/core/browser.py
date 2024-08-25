@@ -320,6 +320,7 @@ class Browser:
             )  # noqa
 
         exe = self.config.browser_executable_path
+        windows_headless = self.config.windows_headless
         params = self.config()
 
         logger.info(
