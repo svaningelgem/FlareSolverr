@@ -20,6 +20,7 @@ CHROME_MAJOR_VERSION = None
 USER_AGENT = None
 XVFB_DISPLAY = None
 PATCHED_DRIVER_PATH = None
+CLOUDFLARE_EXTENSION_DIR = None
 
 
 def get_config_log_html() -> bool:
@@ -131,6 +132,10 @@ def create_proxy_extension(proxy: dict) -> str:
     return proxy_extension_dir
 
 def create_cloudflare_extension() -> str:
+    global CLOUDFLARE_EXTENSION_DIR
+    if CLOUDFLARE_EXTENSION_DIR is not None:
+        return CLOUDFLARE_EXTENSION_DIR
+
     manifest_json = """
     {
         "manifest_version": 3,
@@ -166,15 +171,15 @@ def create_cloudflare_extension() -> str:
     });
     """
 
-    cloudflare_extension_dir = tempfile.mkdtemp()
+    CLOUDFLARE_EXTENSION_DIR = tempfile.mkdtemp()
 
-    with open(os.path.join(cloudflare_extension_dir, "manifest.json"), "w") as f:
+    with open(os.path.join(CLOUDFLARE_EXTENSION_DIR, "manifest.json"), "w") as f:
         f.write(manifest_json)
 
-    with open(os.path.join(cloudflare_extension_dir, "script.js"), "w") as f:
+    with open(os.path.join(CLOUDFLARE_EXTENSION_DIR, "script.js"), "w") as f:
         f.write(script_js)
 
-    return cloudflare_extension_dir
+    return CLOUDFLARE_EXTENSION_DIR
 
 async def get_webdriver_nd(proxy: dict = None) -> nd.Browser:
     logging.debug('Launching web browser with nodriver...')
@@ -216,7 +221,7 @@ async def get_webdriver_nd(proxy: dict = None) -> nd.Browser:
         logging.debug("Using proxy: %s", proxy_url)
         options.add_argument('--proxy-server=%s' % proxy_url)
 
-    # add cloudflare addon
+    # add cloudflare extension
     # https://github.com/TheFalloutOf76/CDP-bug-MouseEvent-.screenX-.screenY-patcher
     cloudflare_extension_dir = create_cloudflare_extension()
     options.add_extension(os.path.abspath(cloudflare_extension_dir))

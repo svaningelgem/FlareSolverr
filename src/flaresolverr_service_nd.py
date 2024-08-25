@@ -35,7 +35,9 @@ CHALLENGE_TITLES = [
 CHALLENGE_SELECTORS = [
     # Cloudflare
     '#cf-challenge-running', '.ray_id', '.attack-box',
-    '#cf-please-wait', '#challenge-spinner', '#trk_jschal_js', '#turnstile-wrapper', '.lds-ring', '.loading-spinner', '.main-wrapper',
+    '#cf-please-wait', '#challenge-spinner', '#trk_jschal_js',
+    '#turnstile-wrapper', '.lds-ring', '.loading-spinner',
+    '.main-wrapper',
     # Custom CloudFlare for EbookParadijs, Film-Paleis, MuziekFabriek and Puur-Hollands
     'td.info #js_info',
     # Fairlane / pararius.com
@@ -45,8 +47,8 @@ STATUS_CODE = None
 SHORT_TIMEOUT = 2
 SESSIONS_STORAGE = SessionsStorage()
 
-# TO-DO: See if still necessary. Keeping it for now but nodriver already checks for chromium binaries
-#        and exit if no candidate is available
+# TO-DO: See if still necessary. Keeping it for now but nodriver already
+#        checks for chromium binaries and exit if no candidate is available
 async def test_browser_installation_nd():
     logging.info("Testing web browser installation...")
     logging.info("Platform: " + platform.platform())
@@ -408,7 +410,7 @@ async def click_verify_nd(tab: Tab):
 
         if cf_element:
             logging.debug("Cloudflare captcha found!")
-            
+
             # get the iframe target
             for target in tab.browser.targets:
                 if "challenges.cloudflare.com" in target.url:
