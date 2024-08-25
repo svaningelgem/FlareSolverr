@@ -47,7 +47,7 @@ def get_driver_selection() -> str:
     global DRIVER_SELECTION
     if DRIVER_SELECTION is not None:
         return DRIVER_SELECTION
-    DRIVER_SELECTION = os.environ.get('DRIVER', 'undetected-chromedriver')
+    DRIVER_SELECTION = os.environ.get('DRIVER', 'nodriver')
     return DRIVER_SELECTION
 
 def get_current_platform() -> str:

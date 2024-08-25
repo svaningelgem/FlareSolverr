@@ -31,7 +31,7 @@ To select one of them, the `DRIVER` environment variable is available and should
 - undetected-chromedriver:
   - `DRIVER=undetected-chromedriver`
 
-**undetected-chromedriver** is the **default** solving method.
+**nodriver** is the **default** solving method.
 
 ## Installation
 
