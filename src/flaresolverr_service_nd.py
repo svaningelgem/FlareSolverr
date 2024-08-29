@@ -411,11 +411,15 @@ async def click_verify_nd(tab: Tab):
         if cf_element:
             logging.debug("Cloudflare captcha found!")
 
+            # update targets before looking for the iframe
+            # nodriver list it in LOG_LEVEL debug but not in info
+            await tab.browser.update_targets()
             # get the iframe target
-            for target in tab.browser.targets:
-                if "challenges.cloudflare.com" in target.url:
-                    cf_tab = target
-                    break
+            cf_tab = next(
+                (target for target in tab.browser.targets if "challenges.cloudflare.com" in target.url), None
+            )
+            if cf_tab is None:
+                raise ValueError("Captcha iframe not found!")
             logging.debug("Found captcha iframe!")
 
             # get checkbox from iframe
