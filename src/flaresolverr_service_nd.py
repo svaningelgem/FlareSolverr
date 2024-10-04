@@ -405,6 +405,7 @@ async def click_verify_nd(tab: Tab):
     try:
         logging.debug("Checking if cloudflare captcha is present on page...")
         await tab.wait(2)
+        await tab
         cf_element = await tab.find(text="cf-chl-widget-",
                                     timeout=SHORT_TIMEOUT)
 

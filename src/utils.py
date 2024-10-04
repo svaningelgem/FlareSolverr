@@ -188,14 +188,14 @@ async def get_webdriver_nd(proxy: dict = None) -> nd.Browser:
     options.sandbox = False
     options.add_argument('--window-size=1920,1080')
     # todo: this param shows a warning in chrome head-full
-    options.add_argument('--disable-setuid-sandbox')
+    # options.add_argument('--disable-setuid-sandbox')
     # this option removes the zygote sandbox (it seems that the resolution is a bit faster)
-    options.add_argument('--no-zygote')
+    # options.add_argument('--no-zygote')
     # attempt to fix Docker ARM32 build
-    options.add_argument('--disable-gpu-sandbox')
-    options.add_argument('--disable-software-rasterizer')
-    options.add_argument('--ignore-certificate-errors')
-    options.add_argument('--ignore-ssl-errors')
+    # options.add_argument('--disable-gpu-sandbox')
+    # options.add_argument('--disable-software-rasterizer')
+    # options.add_argument('--ignore-certificate-errors')
+    # options.add_argument('--ignore-ssl-errors')
     # fix GL errors in ASUSTOR NAS
     # https://github.com/FlareSolverr/FlareSolverr/issues/782
     # https://github.com/microsoft/vscode/issues/127800#issuecomment-873342069

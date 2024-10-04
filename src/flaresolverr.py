@@ -113,6 +113,9 @@ if __name__ == "__main__":
 
     logging.info(f'FlareSolverr {utils.get_flaresolverr_version()}')
     logging.debug('Debug log enabled')
+    logging.info("WARNING: YOU ARE RUNNING AN UNOFFICIAL EXPERIMENTAL BRANCH OF FLARESOLVER WHICH MAY CONTAIN BUGS.")
+    logging.info("WARNING: IF YOU ENCOUNTER ANY, PLEASE REPORT THEM ON GITHUB AT THE FOLLOWING LINK:")
+    logging.info("WARNING: https://github.com/FlareSolverr/FlareSolverr/pull/1163")
 
     # Get current OS for global variable
     utils.get_current_platform()
