@@ -43,7 +43,7 @@ CHALLENGE_SELECTORS = [
     # Fairlane / pararius.com
     'div.vc div.text-box h2'
 ]
-STATUS_CODE = None
+STATUS_CODE = 200 # Always return 200 until I can catch the proper return code
 SHORT_TIMEOUT = 2
 SESSIONS_STORAGE = SessionsStorage()
 
