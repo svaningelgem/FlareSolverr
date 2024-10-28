@@ -372,7 +372,7 @@ class Browser:
             processes = [self._process] + psutil.Process(self._process.pid).children(recursive=True)
             for proc in processes:
                 try:
-                    logging.debug(f"Terminating browser process {proc} after failure")
+                    logging.debug(f"Terminating browser process {proc.pid} after failure")
                     proc.terminate()
                 except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
                     pass
