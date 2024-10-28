@@ -500,7 +500,7 @@ async def after_run_cleanup(driver: nd.Browser):
     # Wait for the websocket to return True (Closed)
     while True:
         websocket_status = driver.connection.closed
-        logging.debug(f"Websocket status: {websocket_status}")
+        logging.debug(f"Websocket closed status: {websocket_status}")
         if websocket_status:
             break
         await asyncio.sleep(0.1)

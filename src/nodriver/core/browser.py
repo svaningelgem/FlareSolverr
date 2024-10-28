@@ -292,6 +292,8 @@ class Browser:
             self.config.host = "127.0.0.1"
             self.config.port = util.free_port()
 
+        logging.debug(f"Browser listening on port {self.config.port}")
+
         if not connect_existing:
             logger.debug(
                 "BROWSER EXECUTABLE PATH: %s", self.config.browser_executable_path
@@ -331,36 +333,51 @@ class Browser:
             if os.name == 'nt' and windows_headless:
                 startupinfo = subprocess.STARTUPINFO()
                 startupinfo.dwFlags |= subprocess.STARTF_USESHOWWINDOW
-            self._process: asyncio.subprocess.Process = (
-                await asyncio.create_subprocess_exec(
-                    # self.config.browser_executable_path,
-                    # *cmdparams,
-                    exe,
-                    *params,
-                    stdin=asyncio.subprocess.PIPE,
-                    stdout=asyncio.subprocess.PIPE,
-                    stderr=asyncio.subprocess.PIPE,
-                    close_fds=is_posix,
-                    startupinfo=startupinfo,
+            try:
+                self._process: asyncio.subprocess.Process = (
+                    await asyncio.create_subprocess_exec(
+                        # self.config.browser_executable_path,
+                        # *cmdparams,
+                        exe,
+                        *params,
+                        stdin=asyncio.subprocess.PIPE,
+                        stdout=asyncio.subprocess.PIPE,
+                        stderr=asyncio.subprocess.PIPE,
+                        close_fds=is_posix,
+                        startupinfo=startupinfo,
+                    )
                 )
-            )
-            self._process_pid = self._process.pid
-            logger.info("created process with pid %d " % self._process_pid)
+                self._process_pid = self._process.pid
+                logger.debug("created process with pid %d " % self._process_pid)
+            except Exception as e:
+                logging.debug(f"Couldn't create Chromium browser: {str(e)}")
 
         self._http = HTTPApi((self.config.host, self.config.port))
         util.get_registered_instances().add(self)
         await asyncio.sleep(0.25)
-        for _ in range(5):
+        logging.debug(f"Trying to connect to browser on address {self.config.host}:{self.config.port}")
+        for _ in range(20):
             try:
                 self.info = ContraDict(await self._http.get("version"), silent=True)
             except (Exception,):
-                if _ == 4:
-                    logger.debug("could not start", exc_info=True)
-                await self.sleep(0.5)
+                if _ == 10:
+                    logging.debug("Couldn't connect after 10 tries...", exc_info=True)
+                await self.sleep(1)
             else:
+                logging.debug("Successfully connected to browser!")
                 break
 
         if not self.info:
+            import psutil
+            processes = [self._process] + psutil.Process(self._process.pid).children(recursive=True)
+            for proc in processes:
+                try:
+                    logging.debug(f"Terminating browser process {proc} after failure")
+                    proc.terminate()
+                except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                    pass
+            util.get_registered_instances().remove(self)
+
             raise Exception(
                 (
                     """
