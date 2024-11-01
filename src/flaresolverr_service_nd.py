@@ -262,16 +262,20 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
         domain = ".".join(domain[-2:])
 
         # Delete all cookies
-        logging.debug("Remove all Browser cookies...")
+        logging.debug("Removing all Browser cookies...")
         await driver.cookies.clear()
 
         cookies: List[utils.nd.cdp.network.CookieParam] = []
         for cookie in req.cookies:
+            if domain not in cookie["domain"]:
+                logging.debug(f"Skipping cookie from domain {cookie['domain']}")
+                continue
+            logging.debug(f"Appending cookie '{cookie['name']}' for '{cookie['domain']}'...")
             cookies.append(utils.nd.cdp.network.CookieParam(
                 name=cookie["name"],
                 value=cookie["value"],
-                path="/",
-                domain=domain
+                path=cookie["path"],
+                domain=cookie["domain"]
             ))
 
         await driver.cookies.set_all(cookies)
