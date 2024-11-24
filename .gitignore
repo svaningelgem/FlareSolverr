@@ -127,8 +127,6 @@ dmypy.json
 
 # node
 node_modules/
-/src/chrome/
-/src/chrome-131/
-/src/chrome_good/
+/src/chrome*/
 /src/selenium/
 *.png
