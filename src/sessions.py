@@ -71,12 +71,12 @@ class SessionsStorage:
         session.driver.quit()
         return True
 
-    def get(self, session_id: str, ttl: Optional[timedelta] = None) -> Tuple[Session, bool]:
-        session, fresh = self.create(session_id)
+    def get(self, session_id: str, ttl: Optional[timedelta] = None, user_agent: Optional[str] = None) -> Tuple[Session, bool]:
+        session, fresh = self.create(session_id, user_agent=user_agent)
 
         if ttl is not None and not fresh and session.lifetime() > ttl:
             logging.debug(f'session\'s lifetime has expired, so the session is recreated (session_id={session_id})')
-            session, fresh = self.create(session_id, force_new=True)
+            session, fresh = self.create(session_id, force_new=True, user_agent=user_agent)
 
         return session, fresh
 
