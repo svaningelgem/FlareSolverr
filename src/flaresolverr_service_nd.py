@@ -44,7 +44,7 @@ CHALLENGE_SELECTORS = [
     'div.vc div.text-box h2'
 ]
 STATUS_CODE = 200 # Always return 200 until I can catch the proper return code
-SHORT_TIMEOUT = 2
+SHORT_TIMEOUT = 10
 SESSIONS_STORAGE = SessionsStorage()
 
 # TO-DO: See if still necessary. Keeping it for now but nodriver already
