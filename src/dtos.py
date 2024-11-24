@@ -1,4 +1,7 @@
+from typing import TypeAlias, Union
+
 import undetected_chromedriver as uc
+import nodriver as nd
 
 
 STATUS_OK = "ok"
@@ -90,3 +93,10 @@ class HealthResponse(object):
 
 class FSDriver(uc.Chrome):
     user_agent: str = None
+
+
+class NDDriver(nd.Browser):
+    user_agent: str = None
+
+
+MyDriver: TypeAlias = Union[FSDriver, NDDriver]

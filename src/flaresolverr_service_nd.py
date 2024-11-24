@@ -68,8 +68,7 @@ async def test_browser_installation_nd():
         logging.info("Chrome / Chromium major version: " + chrome_major_version)
 
     logging.info("Launching web browser...")
-    user_agent = await utils.get_user_agent_nd()
-    logging.info("FlareSolverr User-Agent: " + user_agent)
+    logging.info("FlareSolverr User-Agent: " + await utils.get_user_agent_nd())
     logging.info("Test successful!")
 
 async def controller_v1_endpoint_nd(req: V1RequestBase) -> V1ResponseBase:
@@ -389,8 +388,7 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
     challenge_res.status = STATUS_CODE
     logging.debug("requesting cookies from the driver")
     challenge_res.cookies = await driver.cookies.get_all(requests_cookie_format=True)
-    logging.debug("requesting user agent from the driver")
-    challenge_res.userAgent = await utils.get_user_agent_nd(driver)
+    challenge_res.userAgent = driver.user_agent
 
     if not req.returnOnlyCookies:
         challenge_res.headers = {}  # TO-DO: nodriver should support this, let's add it later

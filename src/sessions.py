@@ -3,7 +3,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Optional, Tuple
 from uuid import uuid1
-from dtos import FSDriver
+from dtos import FSDriver, MyDriver
 
 import utils
 
@@ -11,9 +11,8 @@ import utils
 @dataclass
 class Session:
     session_id: str
-    driver: FSDriver
+    driver: MyDriver
     created_at: datetime
-    user_agent: str = None
 
     def lifetime(self) -> timedelta:
         return datetime.now() - self.created_at
@@ -47,7 +46,7 @@ class SessionsStorage:
 
         driver = utils.get_webdriver_uc(proxy, user_agent)
         created_at = datetime.now()
-        session = Session(session_id, driver, created_at, user_agent)
+        session = Session(session_id, driver, created_at)
 
         self.sessions[session_id] = session
 

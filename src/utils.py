@@ -4,12 +4,16 @@ import os
 import re
 import shutil
 import tempfile
+
+import asyncio
+import psutil
 from bs4 import BeautifulSoup
 import urllib.parse
 
 import undetected_chromedriver as uc
-from dtos import FSDriver
+from dtos import FSDriver, MyDriver
 import nodriver as nd
+from src.dtos import NDDriver
 
 FLARESOLVERR_VERSION = None
 DRIVER_SELECTION = None
@@ -179,7 +183,7 @@ def create_cloudflare_extension() -> str:
 
     return CLOUDFLARE_EXTENSION_DIR
 
-async def get_webdriver_nd(proxy: dict = None) -> nd.Browser:
+async def get_webdriver_nd(proxy: dict = None, user_agent: str = None) -> NDDriver:
     logging.debug('Launching web browser with nodriver...')
 
     options = nd.Config()
@@ -203,8 +207,8 @@ async def get_webdriver_nd(proxy: dict = None) -> nd.Browser:
     options.lang = os.environ.get('LANG', 'en')
 
     # Fix for Chrome 117 | https://github.com/FlareSolverr/FlareSolverr/issues/910
-    if USER_AGENT is not None:
-        options.add_argument('--user-agent=%s' % USER_AGENT)
+    if user_agent:
+        options.add_argument('--user-agent=%s' % user_agent)
 
     proxy_extension_dir = None
     if proxy and all(key in proxy for key in ['url', 'username', 'password']):
@@ -235,7 +239,11 @@ async def get_webdriver_nd(proxy: dict = None) -> nd.Browser:
         options.browser_executable_path = CHROME_EXE_PATH
 
     try:
-        driver = await nd.Browser.create(config=options)
+        driver = await NDDriver.create(config=options)
+        user_agent = driver.info['User-Agent']
+        # Fix for Chrome 117 | https://github.com/FlareSolverr/FlareSolverr/issues/910
+        user_agent = re.sub('HEADLESS', '', user_agent, flags=re.IGNORECASE)
+        driver.user_agent = user_agent
     except Exception as e:
         logging.error("Error creating Chrome Browser: %s" % e)
 
@@ -439,109 +447,78 @@ def extract_version_nt_folder() -> str:
     return ''
 
 
-# async def get_user_agent_nd(driver=None) -> str:
-#     global USER_AGENT
-#     if USER_AGENT is not None:
-#         return USER_AGENT
-#
-#     try:
-#         if driver is None:
-#             logging.info("Launching web browser...")
-#             driver = await get_webdriver_nd()
-#         USER_AGENT = driver.info['User-Agent']
-#         # Fix for Chrome 117 | https://github.com/FlareSolverr/FlareSolverr/issues/910
-#         USER_AGENT = re.sub('HEADLESS', '', USER_AGENT, flags=re.IGNORECASE)
-#         return USER_AGENT
-#     except Exception as e:
-#         raise Exception("Error getting browser User-Agent. " + str(e))
-#     finally:
-#         if driver is not None:
-#             await after_run_cleanup(driver=driver)
-#
-#
-# def get_user_agent_uc(driver=None) -> str:
-#     global USER_AGENT
-#     if USER_AGENT is not None:
-#         return USER_AGENT
-#
-#     try:
-#         if driver is None:
-#             driver = get_webdriver_uc()
-#         USER_AGENT = driver.execute_script("return navigator.userAgent")
-#         # Fix for Chrome 117 | https://github.com/FlareSolverr/FlareSolverr/issues/910
-#         USER_AGENT = re.sub('HEADLESS', '', USER_AGENT, flags=re.IGNORECASE)
-#         return USER_AGENT
-#     except Exception as e:
-#         raise Exception("Error getting browser User-Agent. " + str(e))
-#     finally:
-#         if driver is not None:
-#             if PLATFORM_VERSION == "nt":
-#                 driver.close()
-#             driver.quit()
-#
-#
-# async def after_run_cleanup(driver: nd.Browser):
-#     """
-#     After run function to remove Chromium processes and delete the
-#     the Browser instance data dir if necessary.
-#     """
-#
-#     # Get Browser instance process
-#     process = driver.get_process
-#     if process is None:
-#         return
-#
-#     # Get the list of child processes before closing the Browser instance
-#     child_processes = psutil.Process(process.pid).children(recursive=True)
-#
-#     # Stop Browser instance
-#     driver.stop()
-#
-#     # Wait for the websocket to return True (Closed)
-#     while True:
-#         websocket_status = driver.connection.closed
-#         logging.debug(f"Websocket closed status: {websocket_status}")
-#         if websocket_status:
-#             break
-#         await asyncio.sleep(0.1)
-#
-#     # Find all chromium processes and terminate them if any
-#     for proc in child_processes:
-#         try:
-#             if proc.pid == process.pid:
-#                 logging.debug(f"Terminating Chromium process with PID: {proc.pid}")
-#                 proc.terminate()
-#             elif any(name in proc.name().lower() for name in ("chromium", "chrome")):
-#                 logging.debug(f"Terminating Chromium child process with PID: {proc.pid}")
-#                 proc.terminate()
-#             elif proc.status() == 'zombie':
-#                 logging.debug(f"Terminating zombie Chromium process with PID: {proc.pid}")
-#                 proc.terminate()
-#         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-#             pass
-#
-#     # Wait for all processes to terminate
-#     for proc in child_processes:
-#         try:
-#             if proc.pid == process.pid or \
-#             any(name in proc.name().lower() for name in ("chromium", "chrome")):
-#                 proc.wait(timeout=10)
-#         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
-#             pass
-#
-#     # Delete Browser instance data dir
-#     try:
-#         user_dir = driver.config.user_data_dir
-#         shutil.rmtree(user_dir, ignore_errors=False)
-#         logging.debug(f"Removed Browser user data directory {user_dir}")
-#     except OSError as e:
-#         logging.debug(f"Failed to delete Browser user data directory {user_dir} - {str(e)}")
-#
-#     # Remove Browser instance from created instances
-#     try:
-#         nd.util.get_registered_instances().remove(driver)
-#     except Exception as e:
-#         logging.debug(f"Error when removing the Browser instance: {str(e)}")
+async def get_user_agent_nd() -> str:
+    driver = None
+    try:
+        logging.info("Launching web browser...")
+        driver = await get_webdriver_nd()
+        return driver.user_agent
+    finally:
+        if driver is not None:
+            await after_run_cleanup(driver=driver)
+
+async def after_run_cleanup(driver: nd.Browser):
+    """
+    After run function to remove Chromium processes and delete the
+    the Browser instance data dir if necessary.
+    """
+
+    # Get Browser instance process
+    process = driver.get_process
+    if process is None:
+        return
+
+    # Get the list of child processes before closing the Browser instance
+    child_processes = psutil.Process(process.pid).children(recursive=True)
+
+    # Stop Browser instance
+    driver.stop()
+
+    # Wait for the websocket to return True (Closed)
+    while True:
+        websocket_status = driver.connection.closed
+        logging.debug(f"Websocket closed status: {websocket_status}")
+        if websocket_status:
+            break
+        await asyncio.sleep(0.1)
+
+    # Find all chromium processes and terminate them if any
+    for proc in child_processes:
+        try:
+            if proc.pid == process.pid:
+                logging.debug(f"Terminating Chromium process with PID: {proc.pid}")
+                proc.terminate()
+            elif any(name in proc.name().lower() for name in ("chromium", "chrome")):
+                logging.debug(f"Terminating Chromium child process with PID: {proc.pid}")
+                proc.terminate()
+            elif proc.status() == 'zombie':
+                logging.debug(f"Terminating zombie Chromium process with PID: {proc.pid}")
+                proc.terminate()
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
+
+    # Wait for all processes to terminate
+    for proc in child_processes:
+        try:
+            if proc.pid == process.pid or \
+            any(name in proc.name().lower() for name in ("chromium", "chrome")):
+                proc.wait(timeout=10)
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
+
+    # Delete Browser instance data dir
+    try:
+        user_dir = driver.config.user_data_dir
+        shutil.rmtree(user_dir, ignore_errors=False)
+        logging.debug(f"Removed Browser user data directory {user_dir}")
+    except OSError as e:
+        logging.debug(f"Failed to delete Browser user data directory {user_dir} - {str(e)}")
+
+    # Remove Browser instance from created instances
+    try:
+        nd.util.get_registered_instances().remove(driver)
+    except Exception as e:
+        logging.debug(f"Error when removing the Browser instance: {str(e)}")
 
 def start_xvfb_display():
     global XVFB_DISPLAY
