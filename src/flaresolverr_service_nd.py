@@ -6,6 +6,9 @@ import asyncio
 from datetime import timedelta
 from urllib.parse import unquote, urlparse
 from typing import List
+
+from setuptools.package_index import user_agent
+
 from nodriver import Browser, Tab
 from sessions_nd import SessionsStorage
 
@@ -98,7 +101,7 @@ async def _controller_v1_handler_nd(req: V1RequestBase) -> V1ResponseBase:
         raise Exception("Request parameter 'cmd' is mandatory.")
     if req.headers is not None:
         logging.warning("Request parameter 'headers' was removed in FlareSolverr v2.")
-    if req.userAgent is not None:
+    if req.userAgent is not None and req.cmd != 'sessions.create':
         logging.warning("Request parameter 'userAgent' was removed in FlareSolverr v2.")
 
     # set default values
@@ -159,7 +162,7 @@ async def _cmd_request_post_nd(req: V1RequestBase) -> V1ResponseBase:
 async def _cmd_sessions_create_nd(req: V1RequestBase) -> V1ResponseBase:
     logging.debug("Creating new session...")
 
-    session, fresh = await SESSIONS_STORAGE.create(session_id=req.session, proxy=req.proxy)
+    session, fresh = await SESSIONS_STORAGE.create(session_id=req.session, proxy=req.proxy, user_agent=req.userAgent)
     session_id = session.session_id
 
     if not fresh:

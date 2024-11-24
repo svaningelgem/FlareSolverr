@@ -11,9 +11,8 @@ from bs4 import BeautifulSoup
 import urllib.parse
 
 import undetected_chromedriver as uc
-from dtos import FSDriver, MyDriver
+from dtos import FSDriver, NDDriver
 import nodriver as nd
-from src.dtos import NDDriver
 
 FLARESOLVERR_VERSION = None
 DRIVER_SELECTION = None

@@ -15,7 +15,7 @@ from selenium.webdriver.support.wait import WebDriverWait
 
 import utils
 from dtos import (
-    FSDriver, STATUS_ERROR, STATUS_OK, ChallengeResolutionResultT,
+    MyDriver, STATUS_ERROR, STATUS_OK, ChallengeResolutionResultT,
     ChallengeResolutionT, HealthResponse, IndexResponse,
     V1RequestBase, V1ResponseBase
 )
@@ -115,7 +115,7 @@ def _controller_v1_handler(req: V1RequestBase) -> V1ResponseBase:
         raise Exception("Request parameter 'cmd' is mandatory.")
     if req.headers is not None:
         logging.warning("Request parameter 'headers' was removed in FlareSolverr v2.")
-    if req.userAgent is not None:
+    if req.userAgent is not None and req.cmd != 'sessions.create':
         logging.warning("Request parameter 'userAgent' was removed in FlareSolverr v2.")
 
     # set default values
@@ -269,7 +269,7 @@ def _resolve_challenge(req: V1RequestBase, method: str) -> ChallengeResolutionT:
             logging.debug('A used instance of webdriver has been destroyed')
 
 
-def get_shadowed_iframe(driver: WebDriver, css_selector: str):
+def get_shadowed_iframe(driver: MyDriver, css_selector: str):
     logging.debug("Getting ShadowRoot by selector: %s", css_selector)
     shadow_element = driver.execute_script("""
       return (arguments[0] && document.querySelector(arguments[0])?.shadowRoot?.firstChild) || null;
@@ -281,7 +281,7 @@ def get_shadowed_iframe(driver: WebDriver, css_selector: str):
     return shadow_element
 
 
-def click_verify(driver: FSDriver):
+def click_verify(driver: MyDriver):
     try:
         logging.debug("Try to find the Cloudflare verify checkbox...")
         # iframe = driver.find_element(By.XPATH, "//iframe[starts-with(@id, 'cf-chl-widget-')]")
@@ -326,7 +326,7 @@ def click_verify(driver: FSDriver):
     time.sleep(2)
 
 
-def get_correct_window(driver: FSDriver) -> FSDriver:
+def get_correct_window(driver: MyDriver) -> MyDriver:
     if len(driver.window_handles) > 1:
         for window_handle in driver.window_handles:
             driver.switch_to.window(window_handle)
@@ -335,20 +335,20 @@ def get_correct_window(driver: FSDriver) -> FSDriver:
                 return driver
     return driver
 
-def switch_to_new_tab(driver: WebDriver, url: str) -> None:
+def switch_to_new_tab(driver: MyDriver, url: str) -> None:
     logging.debug("Opening new tab...")
     driver.execute_script(f"window.open('{url}', 'new tab')")
     time.sleep(4)
     logging.debug("Closing original tab...")
     driver.close()
 
-def access_page(driver: FSDriver, url: str) -> None:
+def access_page(driver: MyDriver, url: str) -> None:
     driver.get(url)
     driver.start_session()
     driver.start_session()  # required to bypass Cloudflare
 
 
-def _evil_logic(req: V1RequestBase, driver: FSDriver, method: str) -> ChallengeResolutionT:
+def _evil_logic(req: V1RequestBase, driver: MyDriver, method: str) -> ChallengeResolutionT:
     res = ChallengeResolutionT({})
     res.status = STATUS_OK
     res.message = ""
@@ -470,7 +470,7 @@ def _evil_logic(req: V1RequestBase, driver: FSDriver, method: str) -> ChallengeR
     return res
 
 
-def _post_request(req: V1RequestBase, driver: FSDriver):
+def _post_request(req: V1RequestBase, driver: MyDriver):
     post_form = f'<form id="hackForm" action="{req.url}" method="POST">'
     query_string = req.postData if req.postData[0] != '?' else req.postData[1:]
     pairs = query_string.split('&')

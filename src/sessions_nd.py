@@ -27,7 +27,7 @@ class SessionsStorage:
         self.sessions = {}
 
     async def create(self, session_id: Optional[str] = None, proxy: Optional[dict] = None,
-               force_new: Optional[bool] = False) -> Tuple[Session, bool]:
+               force_new: Optional[bool] = False, user_agent: Optional[str] = None) -> Tuple[Session, bool]:
         """create new instance of Browser if necessary,
         assign defined (or newly generated) session_id to the instance
         and returns the session object. If a new session has been created
@@ -46,7 +46,7 @@ class SessionsStorage:
         if self.exists(session_id):
             return self.sessions[session_id], False
 
-        driver = await utils.get_webdriver_nd(proxy)
+        driver = await utils.get_webdriver_nd(proxy, user_agent)
         created_at = datetime.now()
         session = Session(session_id, driver, created_at)
 
