@@ -20,7 +20,7 @@ PATCHED_DRIVER_PATH = None
 
 
 def get_config_log_html() -> bool:
-    return os.environ.get('LOG_HTML', 'false').lower() == 'true'
+    return os.environ.get('LOG_HTML', 'true').lower() == 'true'
 
 
 def get_config_headless() -> bool:
@@ -145,7 +145,7 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
     # https://peter.sh/experiments/chromium-command-line-switches/#use-gl
     options.add_argument('--use-gl=swiftshader')
 
-    language = os.environ.get('LANG', None)
+    language = os.environ.get('LANG', 'en')
     if language is not None:
         options.add_argument('--accept-lang=%s' % language)
 

@@ -2,6 +2,7 @@ import logging
 import platform
 import sys
 import time
+from bs4 import BeautifulSoup
 from datetime import timedelta
 from html import escape
 from urllib.parse import unquote, quote
@@ -50,6 +51,14 @@ CHALLENGE_SELECTORS = [
 SHORT_TIMEOUT = 1
 SESSIONS_STORAGE = SessionsStorage()
 
+def format_html(input_html):
+    # Parse the input HTML string
+    soup = BeautifulSoup(input_html, 'html.parser')
+
+    # Format the HTML with pretty print
+    formatted_html = soup.prettify()
+
+    return f"\n==========================================\n{formatted_html}\n==========================================\n"
 
 def test_browser_installation():
     logging.info("Testing web browser installation...")
@@ -219,6 +228,21 @@ def _cmd_sessions_destroy(req: V1RequestBase) -> V1ResponseBase:
         "message": "The session has been removed."
     })
 
+def _init_driver(driver):
+    try:
+        driver.execute_cdp_cmd('Page.enable', {})
+        driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+            'source': """
+        Element.prototype._as = Element.prototype.attachShadow;
+        Element.prototype.attachShadow = function (params) {
+          return this._as({mode: "open"})
+        };
+      """
+        })
+        # driver.execute_cdp_cmd('Network.enable', {})
+    except Exception as e:
+        logging.debug("Driver init exception: %s", repr(e))
+
 
 def _resolve_challenge(req: V1RequestBase, method: str) -> ChallengeResolutionT:
     timeout = int(req.maxTimeout) / 1000
@@ -239,6 +263,9 @@ def _resolve_challenge(req: V1RequestBase, method: str) -> ChallengeResolutionT:
         else:
             driver = utils.get_webdriver(req.proxy)
             logging.debug('New instance of webdriver has been created to perform the request')
+
+        _init_driver(driver)
+
         return func_timeout(timeout, _evil_logic, (req, driver, method))
     except FunctionTimedOut:
         raise Exception(f'Error solving the challenge. Timeout after {timeout} seconds.')
@@ -252,14 +279,34 @@ def _resolve_challenge(req: V1RequestBase, method: str) -> ChallengeResolutionT:
             logging.debug('A used instance of webdriver has been destroyed')
 
 
+def get_shadowed_iframe(driver: WebDriver, css_selector: str):
+    logging.debug("Getting ShadowRoot by selector: %s", css_selector)
+    shadow_element = driver.execute_script("""
+      return (arguments[0] && document.querySelector(arguments[0])?.shadowRoot?.firstChild) || null;
+  """, css_selector)
+    if shadow_element:
+        logging.debug("iframe found")
+    else:
+        logging.debug("iframe not found")
+    return shadow_element
+
+
 def click_verify(driver: WebDriver):
     try:
+
         logging.debug("Try to find the Cloudflare verify checkbox...")
-        iframe = driver.find_element(By.XPATH, "//iframe[starts-with(@id, 'cf-chl-widget-')]")
+        # iframe = driver.find_element(By.XPATH, "//iframe[starts-with(@id, 'cf-chl-widget-')]")
+        iframe = get_shadowed_iframe(driver, "div.cf-turnstile-wrapper")
+        if iframe:
+            logging.debug(f"iframe found ({type(iframe)})")
+            logging.debug("iframe source: " + iframe.page_source)
+        else:
+            logging.debug("iframe not found")
+
         driver.switch_to.frame(iframe)
         checkbox = driver.find_element(
             by=By.XPATH,
-            value='//*[@id="content"]/div/div/label/input',
+            value='//label/input',
         )
         if checkbox:
             actions = ActionChains(driver)
@@ -267,8 +314,8 @@ def click_verify(driver: WebDriver):
             actions.click(checkbox)
             actions.perform()
             logging.debug("Cloudflare verify checkbox found and clicked!")
-    except Exception:
-        logging.debug("Cloudflare verify checkbox not found on the page.")
+    except Exception as e:
+        logging.debug(f"Cloudflare verify checkbox not found on the page. {repr(e)} - {e}")
     finally:
         driver.switch_to.default_content()
 
@@ -286,6 +333,7 @@ def click_verify(driver: WebDriver):
             logging.debug("The Cloudflare 'Verify you are human' button found and clicked!")
     except Exception:
         logging.debug("The Cloudflare 'Verify you are human' button not found on the page.")
+        logging.debug(format_html(driver.page_source))
 
     time.sleep(2)
 
@@ -335,7 +383,7 @@ def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> Challenge
 
     # wait for the page
     if utils.get_config_log_html():
-        logging.debug(f"Response HTML:\n{driver.page_source}")
+        logging.debug(f"Response HTML: {format_html(driver.page_source)}")
     html_element = driver.find_element(By.TAG_NAME, "html")
     page_title = driver.title
 
