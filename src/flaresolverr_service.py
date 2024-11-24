@@ -2,6 +2,7 @@ import logging
 import platform
 import sys
 import time
+from bs4 import BeautifulSoup
 from datetime import timedelta
 from urllib.parse import unquote
 
@@ -40,7 +41,7 @@ CHALLENGE_TITLES = [
 ]
 CHALLENGE_SELECTORS = [
     # Cloudflare
-    '#cf-challenge-running', '.ray_id', '.attack-box', '#cf-please-wait', '#challenge-spinner', '#trk_jschal_js',
+    '#cf-challenge-running', '.ray_id', '.attack-box', '#cf-please-wait', '#challenge-spinner', '#trk_jschal_js', '#turnstile-wrapper', '.lds-ring',
     # Custom CloudFlare for EbookParadijs, Film-Paleis, MuziekFabriek and Puur-Hollands
     'td.info #js_info',
     # Fairlane / pararius.com
@@ -49,6 +50,14 @@ CHALLENGE_SELECTORS = [
 SHORT_TIMEOUT = 1
 SESSIONS_STORAGE = SessionsStorage()
 
+def format_html(input_html):
+    # Parse the input HTML string
+    soup = BeautifulSoup(input_html, 'html.parser')
+
+    # Format the HTML with pretty print
+    formatted_html = soup.prettify()
+
+    return f"\n==========================================\n{formatted_html}\n==========================================\n"
 
 def test_browser_installation_uc():
     logging.info("Testing web browser installation...")
@@ -119,7 +128,7 @@ def _controller_v1_handler(req: V1RequestBase) -> V1ResponseBase:
         logging.warning("Request parameter 'userAgent' was removed in FlareSolverr v2.")
 
     # set default values
-    if req.maxTimeout is None or req.maxTimeout < 1:
+    if req.maxTimeout is None or int(req.maxTimeout) < 1:
         req.maxTimeout = 60000
 
     # execute the command
@@ -218,9 +227,24 @@ def _cmd_sessions_destroy(req: V1RequestBase) -> V1ResponseBase:
         "message": "The session has been removed."
     })
 
+def _init_driver(driver):
+    try:
+        driver.execute_cdp_cmd('Page.enable', {})
+        driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
+            'source': """
+        Element.prototype._as = Element.prototype.attachShadow;
+        Element.prototype.attachShadow = function (params) {
+          return this._as({mode: "open"})
+        };
+      """
+        })
+        # driver.execute_cdp_cmd('Network.enable', {})
+    except Exception as e:
+        logging.debug("Driver init exception: %s", repr(e))
+
 
 def _resolve_challenge(req: V1RequestBase, method: str) -> ChallengeResolutionT:
-    timeout = req.maxTimeout / 1000
+    timeout = int(req.maxTimeout) / 1000
     driver = None
     try:
         if req.session:
@@ -238,6 +262,9 @@ def _resolve_challenge(req: V1RequestBase, method: str) -> ChallengeResolutionT:
         else:
             driver = utils.get_webdriver_uc(req.proxy)
             logging.debug('New instance of webdriver has been created to perform the request')
+
+        _init_driver(driver)
+
         return func_timeout(timeout, _evil_logic, (req, driver, method))
     except FunctionTimedOut:
         raise Exception(f'Error solving the challenge. Timeout after {timeout} seconds.')
@@ -251,14 +278,33 @@ def _resolve_challenge(req: V1RequestBase, method: str) -> ChallengeResolutionT:
             logging.debug('A used instance of webdriver has been destroyed')
 
 
+def get_shadowed_iframe(driver: WebDriver, css_selector: str):
+    logging.debug("Getting ShadowRoot by selector: %s", css_selector)
+    shadow_element = driver.execute_script("""
+      return (arguments[0] && document.querySelector(arguments[0])?.shadowRoot?.firstChild) || null;
+  """, css_selector)
+    if shadow_element:
+        logging.debug("iframe found")
+    else:
+        logging.debug("iframe not found")
+    return shadow_element
+
+
 def click_verify(driver: WebDriver):
     try:
         logging.debug("Try to find the Cloudflare verify checkbox...")
-        iframe = driver.find_element(By.XPATH, "//iframe[starts-with(@id, 'cf-chl-widget-')]")
+        # iframe = driver.find_element(By.XPATH, "//iframe[starts-with(@id, 'cf-chl-widget-')]")
+        iframe = get_shadowed_iframe(driver, "div.cf-turnstile-wrapper")
+        if iframe:
+            logging.debug(f"iframe found ({type(iframe)})")
+            logging.debug("iframe source: " + iframe.page_source)
+        else:
+            logging.debug("iframe not found")
+
         driver.switch_to.frame(iframe)
         checkbox = driver.find_element(
             by=By.XPATH,
-            value='//*[@id="challenge-stage"]/div/label/input',
+            value='//label/input',
         )
         if checkbox:
             actions = ActionChains(driver)
@@ -266,8 +312,8 @@ def click_verify(driver: WebDriver):
             actions.click(checkbox)
             actions.perform()
             logging.debug("Cloudflare verify checkbox found and clicked!")
-    except Exception:
-        logging.debug("Cloudflare verify checkbox not found on the page.")
+    except Exception as e:
+        logging.debug(f"Cloudflare verify checkbox not found on the page. {repr(e)} - {e}")
     finally:
         driver.switch_to.default_content()
 
@@ -340,7 +386,7 @@ def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> Challenge
 
     # wait for the page
     if utils.get_config_log_html():
-        logging.debug(f"Response HTML:\n{driver.page_source}")
+        logging.debug(f"Response HTML: {format_html(driver.page_source)}")
     html_element = driver.find_element(By.TAG_NAME, "html")
     page_title = driver.title
 
@@ -451,7 +497,7 @@ def _post_request(req: V1RequestBase, driver: WebDriver):
             value = unquote(parts[1])
         except Exception:
             value = parts[1]
-        post_form += f'<input type="text" name="{name}" value="{value}"><br>'
+        post_form += f'<input type="text" name="{escape(quote(name))}" value="{escape(quote(value))}"><br>'
     post_form += '</form>'
     html_content = f"""
         <!DOCTYPE html>
