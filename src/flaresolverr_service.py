@@ -119,7 +119,7 @@ def _controller_v1_handler(req: V1RequestBase) -> V1ResponseBase:
         logging.warning("Request parameter 'userAgent' was removed in FlareSolverr v2.")
 
     # set default values
-    if req.maxTimeout is None or int(req.maxTimeout) < 1:
+    if req.maxTimeout is None or req.maxTimeout < 1:
         req.maxTimeout = 60000
 
     # execute the command
@@ -235,7 +235,7 @@ def _init_driver(driver):
 
 
 def _resolve_challenge(req: V1RequestBase, method: str) -> ChallengeResolutionT:
-    timeout = int(req.maxTimeout) / 1000
+    timeout = req.maxTimeout / 1000
     driver = None
     try:
         if req.session:
@@ -488,7 +488,7 @@ def _post_request(req: V1RequestBase, driver: WebDriver):
             value = unquote(parts[1])
         except Exception:
             value = parts[1]
-        post_form += f'<input type="text" name="{escape(quote(name))}" value="{escape(quote(value))}"><br>'
+        post_form += f'<input type="text" name="{name}" value="{value}"><br>'
     post_form += '</form>'
     html_content = f"""
         <!DOCTYPE html>
