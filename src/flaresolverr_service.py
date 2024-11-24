@@ -8,7 +8,6 @@ from urllib.parse import unquote, quote
 
 from func_timeout import FunctionTimedOut, func_timeout
 from selenium.common import TimeoutException
-from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.support.expected_conditions import (
     presence_of_element_located, staleness_of, title_is)
@@ -16,9 +15,11 @@ from selenium.webdriver.common.action_chains import ActionChains
 from selenium.webdriver.support.wait import WebDriverWait
 
 import utils
-from dtos import (STATUS_ERROR, STATUS_OK, ChallengeResolutionResultT,
-                  ChallengeResolutionT, HealthResponse, IndexResponse,
-                  V1RequestBase, V1ResponseBase)
+from dtos import (
+    FSDriver, STATUS_ERROR, STATUS_OK, ChallengeResolutionResultT,
+    ChallengeResolutionT, HealthResponse, IndexResponse,
+    V1RequestBase, V1ResponseBase
+)
 from sessions import SessionsStorage
 
 ACCESS_DENIED_TITLES = [
@@ -70,8 +71,7 @@ def test_browser_installation():
         logging.info("Chrome / Chromium major version: " + chrome_major_version)
 
     logging.info("Launching web browser...")
-    user_agent = utils.get_user_agent()
-    logging.info("FlareSolverr User-Agent: " + user_agent)
+    logging.info("FlareSolverr User-Agent: " + utils.get_webdriver().user_agent)
     logging.info("Test successful!")
 
 
@@ -79,7 +79,7 @@ def index_endpoint() -> IndexResponse:
     res = IndexResponse({})
     res.msg = "FlareSolverr is ready!"
     res.version = utils.get_flaresolverr_version()
-    res.userAgent = utils.get_user_agent()
+    res.userAgent = utils.get_webdriver().user_agent
     return res
 
 
@@ -180,7 +180,7 @@ def _cmd_request_post(req: V1RequestBase) -> V1ResponseBase:
 def _cmd_sessions_create(req: V1RequestBase) -> V1ResponseBase:
     logging.debug("Creating new session...")
 
-    session, fresh = SESSIONS_STORAGE.create(session_id=req.session, proxy=req.proxy)
+    session, fresh = SESSIONS_STORAGE.create(session_id=req.session, proxy=req.proxy, user_agent=req.userAgent)
     session_id = session.session_id
 
     if not fresh:
@@ -252,7 +252,7 @@ def _resolve_challenge(req: V1RequestBase, method: str) -> ChallengeResolutionT:
             logging.debug('A used instance of webdriver has been destroyed')
 
 
-def click_verify(driver: WebDriver):
+def click_verify(driver: FSDriver):
     try:
         logging.debug("Try to find the Cloudflare verify checkbox...")
         iframe = driver.find_element(By.XPATH, "//iframe[starts-with(@id, 'cf-chl-widget-')]")
@@ -290,7 +290,7 @@ def click_verify(driver: WebDriver):
     time.sleep(2)
 
 
-def get_correct_window(driver: WebDriver) -> WebDriver:
+def get_correct_window(driver: FSDriver) -> FSDriver:
     if len(driver.window_handles) > 1:
         for window_handle in driver.window_handles:
             driver.switch_to.window(window_handle)
@@ -300,13 +300,13 @@ def get_correct_window(driver: WebDriver) -> WebDriver:
     return driver
 
 
-def access_page(driver: WebDriver, url: str) -> None:
+def access_page(driver: FSDriver, url: str) -> None:
     driver.get(url)
     driver.start_session()
     driver.start_session()  # required to bypass Cloudflare
 
 
-def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> ChallengeResolutionT:
+def _evil_logic(req: V1RequestBase, driver: FSDriver, method: str) -> ChallengeResolutionT:
     res = ChallengeResolutionT({})
     res.status = STATUS_OK
     res.message = ""
@@ -412,7 +412,7 @@ def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> Challenge
     challenge_res.url = driver.current_url
     challenge_res.status = 200  # todo: fix, selenium not provides this info
     challenge_res.cookies = driver.get_cookies()
-    challenge_res.userAgent = utils.get_user_agent(driver)
+    challenge_res.userAgent = driver.user_agent
 
     if not req.returnOnlyCookies:
         challenge_res.headers = {}  # todo: fix, selenium not provides this info
@@ -422,7 +422,7 @@ def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> Challenge
     return res
 
 
-def _post_request(req: V1RequestBase, driver: WebDriver):
+def _post_request(req: V1RequestBase, driver: FSDriver):
     post_form = f'<form id="hackForm" action="{req.url}" method="POST">'
     query_string = req.postData if req.postData[0] != '?' else req.postData[1:]
     pairs = query_string.split('&')

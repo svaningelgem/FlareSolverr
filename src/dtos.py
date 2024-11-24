@@ -1,3 +1,5 @@
+import undetected_chromedriver as uc
+
 
 STATUS_OK = "ok"
 STATUS_ERROR = "error"
@@ -84,3 +86,7 @@ class HealthResponse(object):
 
     def __init__(self, _dict):
         self.__dict__.update(_dict)
+
+
+class FSDriver(uc.Chrome):
+    user_agent: str = None

@@ -3,18 +3,16 @@ import logging
 import os
 import re
 import shutil
-import urllib.parse
 import tempfile
-import sys
+import urllib.parse
 
-from selenium.webdriver.chrome.webdriver import WebDriver
 import undetected_chromedriver as uc
+from dtos import FSDriver
 
 FLARESOLVERR_VERSION = None
 PLATFORM_VERSION = None
 CHROME_EXE_PATH = None
 CHROME_MAJOR_VERSION = None
-USER_AGENT = None
 XVFB_DISPLAY = None
 PATCHED_DRIVER_PATH = None
 
@@ -121,8 +119,8 @@ def create_proxy_extension(proxy: dict) -> str:
     return proxy_extension_dir
 
 
-def get_webdriver(proxy: dict = None) -> WebDriver:
-    global PATCHED_DRIVER_PATH, USER_AGENT
+def get_webdriver(proxy: dict = None, user_agent: str = None) -> FSDriver:
+    global PATCHED_DRIVER_PATH
     logging.debug('Launching web browser...')
 
     # undetected_chromedriver
@@ -150,8 +148,8 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
         options.add_argument('--accept-lang=%s' % language)
 
     # Fix for Chrome 117 | https://github.com/FlareSolverr/FlareSolverr/issues/910
-    if USER_AGENT is not None:
-        options.add_argument('--user-agent=%s' % USER_AGENT)
+    if user_agent:
+        options.add_argument('--user-agent=%s' % user_agent)
 
     proxy_extension_dir = None
     if proxy and all(key in proxy for key in ['url', 'username', 'password']):
@@ -192,9 +190,16 @@ def get_webdriver(proxy: dict = None) -> WebDriver:
     # downloads and patches the chromedriver
     # if we don't set driver_executable_path it downloads, patches, and deletes the driver each time
     try:
-        driver = uc.Chrome(options=options, browser_executable_path=browser_executable_path,
+        driver = FSDriver(options=options, browser_executable_path=browser_executable_path,
                            driver_executable_path=driver_exe_path, version_main=version_main,
                            windows_headless=windows_headless, headless=get_config_headless())
+
+        if not user_agent:
+            user_agent = driver.execute_script("return navigator.userAgent")
+            # Fix for Chrome 117 | https://github.com/FlareSolverr/FlareSolverr/issues/910
+            user_agent = re.sub('HEADLESS', '', user_agent, flags=re.IGNORECASE)
+
+        driver.user_agent = user_agent
     except Exception as e:
         logging.error("Error starting Chrome: %s" % e)
 
@@ -304,27 +309,6 @@ def extract_version_nt_folder() -> str:
                     # Found a Chrome version.
                     return match.group(0)
     return ''
-
-
-def get_user_agent(driver=None) -> str:
-    global USER_AGENT
-    if USER_AGENT is not None:
-        return USER_AGENT
-
-    try:
-        if driver is None:
-            driver = get_webdriver()
-        USER_AGENT = driver.execute_script("return navigator.userAgent")
-        # Fix for Chrome 117 | https://github.com/FlareSolverr/FlareSolverr/issues/910
-        USER_AGENT = re.sub('HEADLESS', '', USER_AGENT, flags=re.IGNORECASE)
-        return USER_AGENT
-    except Exception as e:
-        raise Exception("Error getting browser User-Agent. " + str(e))
-    finally:
-        if driver is not None:
-            if PLATFORM_VERSION == "nt":
-                driver.close()
-            driver.quit()
 
 
 def start_xvfb_display():
