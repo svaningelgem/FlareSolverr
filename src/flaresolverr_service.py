@@ -2,7 +2,6 @@ import logging
 import platform
 import sys
 import time
-from bs4 import BeautifulSoup
 from datetime import timedelta
 from urllib.parse import unquote
 
@@ -50,14 +49,6 @@ CHALLENGE_SELECTORS = [
 SHORT_TIMEOUT = 1
 SESSIONS_STORAGE = SessionsStorage()
 
-def format_html(input_html):
-    # Parse the input HTML string
-    soup = BeautifulSoup(input_html, 'html.parser')
-
-    # Format the HTML with pretty print
-    formatted_html = soup.prettify()
-
-    return f"\n==========================================\n{formatted_html}\n==========================================\n"
 
 def test_browser_installation_uc():
     logging.info("Testing web browser installation...")
@@ -386,7 +377,7 @@ def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> Challenge
 
     # wait for the page
     if utils.get_config_log_html():
-        logging.debug(f"Response HTML: {format_html(driver.page_source)}")
+        logging.debug(f"Response HTML: {utils.format_html(driver.page_source)}")
     html_element = driver.find_element(By.TAG_NAME, "html")
     page_title = driver.title
 

@@ -295,7 +295,7 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
     doc: utils.nd.cdp.dom.Node = await tab.send(utils.nd.cdp.dom.get_document(-1, True))
 
     if utils.get_config_log_html():
-        logging.debug(f"Response HTML:\n{await tab.get_content(_node=doc)}")
+        logging.debug(f"Response HTML:\n{utils.format_html(await tab.get_content(_node=doc))}")
     page_title = tab.target.title
 
     # find access denied titles

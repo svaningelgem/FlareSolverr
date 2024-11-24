@@ -7,6 +7,7 @@ import urllib.parse
 import tempfile
 import asyncio
 import psutil
+from bs4 import BeautifulSoup
 
 from selenium.webdriver.chrome.webdriver import WebDriver
 import undetected_chromedriver as uc
@@ -556,3 +557,13 @@ def object_to_dict(_object):
     json_dict = json.loads(json.dumps(_object, default=lambda o: o.__dict__))
     # remove hidden fields
     return {k: v for k, v in json_dict.items() if not k.startswith('__')}
+
+
+def format_html(input_html):
+    # Parse the input HTML string
+    soup = BeautifulSoup(input_html, 'html.parser')
+
+    # Format the HTML with pretty print
+    formatted_html = soup.prettify()
+
+    return f"\n==========================================\n{formatted_html}\n==========================================\n"
