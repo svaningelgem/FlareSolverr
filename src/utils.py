@@ -203,11 +203,7 @@ async def get_webdriver_nd(proxy: dict = None) -> nd.Browser:
     # https://peter.sh/experiments/chromium-command-line-switches/#use-gl
     options.add_argument('--use-gl=swiftshader')
 
-    language = os.environ.get('LANG', None)
-    if language is not None:
-        options.lang = language
-    else:
-        options.lang = "en-US"
+    options.lang = os.environ.get('LANG', 'en')
 
     # Fix for Chrome 117 | https://github.com/FlareSolverr/FlareSolverr/issues/910
     if USER_AGENT is not None:
@@ -278,9 +274,8 @@ def get_webdriver_uc(proxy: dict = None) -> WebDriver:
     # https://peter.sh/experiments/chromium-command-line-switches/#use-gl
     options.add_argument('--use-gl=swiftshader')
 
-    language = os.environ.get('LANG', None)
-    if language is not None:
-        options.add_argument('--accept-lang=%s' % language)
+    language = os.environ.get('LANG', 'en')
+    options.add_argument('--accept-lang=%s' % language)
 
     # Fix for Chrome 117 | https://github.com/FlareSolverr/FlareSolverr/issues/910
     if USER_AGENT is not None:
