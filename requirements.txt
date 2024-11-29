@@ -1,5 +1,5 @@
 bottle==0.13.2
-waitress==2.1.2
+waitress==3.0.1
 selenium==4.15.2
 func-timeout==4.3.5
 psutil==6.0.0
