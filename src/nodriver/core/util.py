@@ -5,16 +5,15 @@ import logging
 import shutil
 import types
 import typing
-from typing import Optional, List, Set, Union, Callable
-
-import typing
+from typing import Callable, List, Optional, Set, Union
 
 from .element import Element
 
 if typing.TYPE_CHECKING:
     from .browser import Browser, PathLike
-from .config import Config
+
 from .. import cdp
+from .config import Config
 
 __registered__instances__: Set[Browser] = set()
 
@@ -34,6 +33,7 @@ async def start(
     windows_headless: Optional[bool] = False,
     host: Optional[str] = None,
     port: Optional[int] = None,
+    expert: Optional[bool] = None,
     **kwargs: Optional[dict],
 ) -> Browser:
     """
@@ -73,6 +73,12 @@ async def start(
     :param host: if you connect to an existing debuggable session, you can specify the host here
                  if both host and port are provided, nodriver will not start a local chrome browser!
     :type host: str
+
+    :param expert:  when set to True, enabled "expert" mode.
+                    This conveys, the inclusion of parameters: --disable-web-security ----disable-site-isolation-trials,
+                    as well as some scripts and patching useful for debugging (for example, ensuring shadow-root is always in "open" mode)
+    :type expert: bool
+
     :return:
     """
     if not config:
@@ -87,6 +93,7 @@ async def start(
             windows_headless,
             host=host,
             port=port,
+            expert=expert,
             **kwargs,
         )
     from .browser import Browser
