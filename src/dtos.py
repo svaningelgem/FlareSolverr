@@ -1,4 +1,3 @@
-
 STATUS_OK = "ok"
 STATUS_ERROR = "error"
 
@@ -41,7 +40,7 @@ class V1RequestBase(object):
     url: str = None
     postData: str = None
     returnOnlyCookies: bool = None
-    download: bool = None   # deprecated v2.0.0, not used
+    download: bool = None  # deprecated v2.0.0, not used
     returnRawHtml: bool = None  # deprecated v2.0.0, not used
 
     def __init__(self, _dict):

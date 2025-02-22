@@ -10,42 +10,56 @@ from nodriver import Browser, Tab
 from sessions_nd import SessionsStorage
 
 import utils
-from dtos import (STATUS_ERROR, STATUS_OK, ChallengeResolutionResultT,
-                  ChallengeResolutionT, V1RequestBase, V1ResponseBase)
+from dtos import (
+    STATUS_ERROR,
+    STATUS_OK,
+    ChallengeResolutionResultT,
+    ChallengeResolutionT,
+    V1RequestBase,
+    V1ResponseBase,
+)
+
 # from sessions import SessionsStorage
 
 ACCESS_DENIED_TITLES = [
     # Cloudflare
-    'Access denied',
+    "Access denied",
     # Cloudflare http://bitturk.net/ Firefox
-    'Attention Required! | Cloudflare'
+    "Attention Required! | Cloudflare",
 ]
 ACCESS_DENIED_SELECTORS = [
     # Cloudflare
-    'div.cf-error-title span.cf-code-label span',
+    "div.cf-error-title span.cf-code-label span",
     # Cloudflare http://bitturk.net/ Firefox
-    '#cf-error-details div.cf-error-overview h1'
+    "#cf-error-details div.cf-error-overview h1",
 ]
 CHALLENGE_TITLES = [
     # Cloudflare
-    'Just a moment...',
+    "Just a moment...",
     # DDoS-GUARD
-    'DDoS-Guard'
+    "DDoS-Guard",
 ]
 CHALLENGE_SELECTORS = [
     # Cloudflare
-    '#cf-challenge-running', '.ray_id', '.attack-box',
-    '#cf-please-wait', '#challenge-spinner', '#trk_jschal_js',
-    '#turnstile-wrapper', '.lds-ring', '.loading-spinner',
-    '.main-wrapper',
+    "#cf-challenge-running",
+    ".ray_id",
+    ".attack-box",
+    "#cf-please-wait",
+    "#challenge-spinner",
+    "#trk_jschal_js",
+    "#turnstile-wrapper",
+    ".lds-ring",
+    ".loading-spinner",
+    ".main-wrapper",
     # Custom CloudFlare for EbookParadijs, Film-Paleis, MuziekFabriek and Puur-Hollands
-    'td.info #js_info',
+    "td.info #js_info",
     # Fairlane / pararius.com
-    'div.vc div.text-box h2'
+    "div.vc div.text-box h2",
 ]
-STATUS_CODE = 200 # Always return 200 until I can catch the proper return code
+STATUS_CODE = 200  # Always return 200 until I can catch the proper return code
 SHORT_TIMEOUT = 2
 SESSIONS_STORAGE = SessionsStorage()
+
 
 # TO-DO: See if still necessary. Keeping it for now but nodriver already
 #        checks for chromium binaries and exit if no candidate is available
@@ -61,7 +75,7 @@ async def test_browser_installation_nd():
         logging.info("Chrome / Chromium path: " + chrome_exe_path)
 
     chrome_major_version = utils.get_chrome_major_version()
-    if chrome_major_version == '':
+    if chrome_major_version == "":
         logging.error("Chrome / Chromium version not detected!")
         sys.exit(1)
     else:
@@ -71,6 +85,7 @@ async def test_browser_installation_nd():
     user_agent = await utils.get_user_agent_nd()
     logging.info("FlareSolverr User-Agent: " + user_agent)
     logging.info("Test successful!")
+
 
 async def controller_v1_endpoint_nd(req: V1RequestBase) -> V1ResponseBase:
     start_ts = int(time.time() * 1000)
@@ -93,6 +108,7 @@ async def controller_v1_endpoint_nd(req: V1RequestBase) -> V1ResponseBase:
     logging.info(f"Response in {(res.endTimestamp - res.startTimestamp) / 1000} s")
     return res
 
+
 async def _controller_v1_handler_nd(req: V1RequestBase) -> V1ResponseBase:
     # do some validations
     if req.cmd is None:
@@ -108,83 +124,96 @@ async def _controller_v1_handler_nd(req: V1RequestBase) -> V1ResponseBase:
 
     # execute the command
     res: V1ResponseBase
-    if req.cmd == 'sessions.create':
+    if req.cmd == "sessions.create":
         res = await _cmd_sessions_create_nd(req)
-    elif req.cmd == 'sessions.list':
+    elif req.cmd == "sessions.list":
         res = _cmd_sessions_list_nd()
-    elif req.cmd == 'sessions.destroy':
+    elif req.cmd == "sessions.destroy":
         res = await _cmd_sessions_destroy_nd(req)
-    elif req.cmd == 'request.get':
+    elif req.cmd == "request.get":
         res = await _cmd_request_get_nd(req)
-    elif req.cmd == 'request.post':
+    elif req.cmd == "request.post":
         res = await _cmd_request_post_nd(req)
     else:
         raise Exception(f"Request parameter 'cmd' = '{req.cmd}' is invalid.")
 
     return res
 
+
 async def _cmd_request_get_nd(req: V1RequestBase) -> V1ResponseBase:
     # do some validations
     if req.url is None:
-        raise Exception("Request parameter 'url' is mandatory in 'request.get' command.")
+        raise Exception(
+            "Request parameter 'url' is mandatory in 'request.get' command."
+        )
     if req.postData is not None:
         raise Exception("Cannot use 'postBody' when sending a GET request.")
     if req.returnRawHtml is not None:
-        logging.warning("Request parameter 'returnRawHtml' was removed in FlareSolverr v2.")
+        logging.warning(
+            "Request parameter 'returnRawHtml' was removed in FlareSolverr v2."
+        )
     if req.download is not None:
         logging.warning("Request parameter 'download' was removed in FlareSolverr v2.")
 
-    challenge_res = await _resolve_challenge_nd(req, 'GET')
+    challenge_res = await _resolve_challenge_nd(req, "GET")
     res = V1ResponseBase({})
     res.status = challenge_res.status
     res.message = challenge_res.message
     res.solution = challenge_res.result
     return res
+
 
 async def _cmd_request_post_nd(req: V1RequestBase) -> V1ResponseBase:
     # do some validations
     if req.postData is None:
-        raise Exception("Request parameter 'postData' is mandatory in 'request.post' command.")
+        raise Exception(
+            "Request parameter 'postData' is mandatory in 'request.post' command."
+        )
     if req.returnRawHtml is not None:
-        logging.warning("Request parameter 'returnRawHtml' was removed in FlareSolverr v2.")
+        logging.warning(
+            "Request parameter 'returnRawHtml' was removed in FlareSolverr v2."
+        )
     if req.download is not None:
         logging.warning("Request parameter 'download' was removed in FlareSolverr v2.")
 
-    challenge_res = await _resolve_challenge_nd(req, 'POST')
+    challenge_res = await _resolve_challenge_nd(req, "POST")
     res = V1ResponseBase({})
     res.status = challenge_res.status
     res.message = challenge_res.message
     res.solution = challenge_res.result
     return res
 
+
 async def _cmd_sessions_create_nd(req: V1RequestBase) -> V1ResponseBase:
     logging.debug("Creating new session...")
 
-    session, fresh = await SESSIONS_STORAGE.create(session_id=req.session, proxy=req.proxy)
+    session, fresh = await SESSIONS_STORAGE.create(
+        session_id=req.session, proxy=req.proxy
+    )
     session_id = session.session_id
 
     if not fresh:
-        return V1ResponseBase({
-            "status": STATUS_OK,
-            "message": "Session already exists.",
-            "session": session_id
-        })
+        return V1ResponseBase(
+            {
+                "status": STATUS_OK,
+                "message": "Session already exists.",
+                "session": session_id,
+            }
+        )
 
-    return V1ResponseBase({
-        "status": STATUS_OK,
-        "message": "Session created successfully.",
-        "session": session_id
-    })
+    return V1ResponseBase(
+        {
+            "status": STATUS_OK,
+            "message": "Session created successfully.",
+            "session": session_id,
+        }
+    )
 
 
 def _cmd_sessions_list_nd() -> V1ResponseBase:
     session_ids = SESSIONS_STORAGE.session_ids()
 
-    return V1ResponseBase({
-        "status": STATUS_OK,
-        "message": "",
-        "sessions": session_ids
-    })
+    return V1ResponseBase({"status": STATUS_OK, "message": "", "sessions": session_ids})
 
 
 async def _cmd_sessions_destroy_nd(req: V1RequestBase) -> V1ResponseBase:
@@ -194,39 +223,56 @@ async def _cmd_sessions_destroy_nd(req: V1RequestBase) -> V1ResponseBase:
     if not existed:
         raise Exception("The session doesn't exist.")
 
-    return V1ResponseBase({
-        "status": STATUS_OK,
-        "message": "The session has been removed."
-    })
+    return V1ResponseBase(
+        {"status": STATUS_OK, "message": "The session has been removed."}
+    )
 
-async def _resolve_challenge_nd(req: V1RequestBase, method: str) -> ChallengeResolutionT:
+
+async def _resolve_challenge_nd(
+    req: V1RequestBase, method: str
+) -> ChallengeResolutionT:
     timeout = req.maxTimeout / 1000
     driver = None
     try:
         if req.session:
             session_id = req.session
-            ttl = timedelta(minutes=req.session_ttl_minutes) if req.session_ttl_minutes else None
+            ttl = (
+                timedelta(minutes=req.session_ttl_minutes)
+                if req.session_ttl_minutes
+                else None
+            )
             session, fresh = await SESSIONS_STORAGE.get(session_id, ttl)
 
             if fresh:
-                logging.debug(f"new session created to perform the request (session_id={session_id})")
+                logging.debug(
+                    f"new session created to perform the request (session_id={session_id})"
+                )
             else:
-                logging.debug(f"existing session is used to perform the request (session_id={session_id}, "
-                              f"lifetime={str(session.lifetime())}, ttl={str(ttl)})")
+                logging.debug(
+                    f"existing session is used to perform the request (session_id={session_id}, "
+                    f"lifetime={str(session.lifetime())}, ttl={str(ttl)})"
+                )
 
             driver = session.driver
         else:
             driver = await utils.get_webdriver_nd(req.proxy)
-            logging.debug('New instance of chromium has been created to perform the request')
-        return await asyncio.wait_for(_evil_logic_nd(req, driver, method), timeout=timeout)
+            logging.debug(
+                "New instance of chromium has been created to perform the request"
+            )
+        return await asyncio.wait_for(
+            _evil_logic_nd(req, driver, method), timeout=timeout
+        )
     except TimeoutError:
-        raise Exception(f'Error solving the challenge. Timeout after {timeout} seconds.')
+        raise Exception(
+            f"Error solving the challenge. Timeout after {timeout} seconds."
+        )
     except Exception as e:
-        raise Exception('Error solving the challenge. ' + str(e).replace('\n', '\\n'))
+        raise Exception("Error solving the challenge. " + str(e).replace("\n", "\\n"))
     finally:
         if not req.session and driver is not None:
             await utils.after_run_cleanup(driver=driver)
-            logging.debug('A used instance of chromium has been destroyed')
+            logging.debug("A used instance of chromium has been destroyed")
+
 
 def get_status_code(event):
     # TO-DO: Need to limit events to the currently used url
@@ -234,14 +280,17 @@ def get_status_code(event):
     STATUS_CODE = event
     # logging.debug("Current network request status code: %s" % STATUS_CODE)
 
-async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> ChallengeResolutionT:
+
+async def _evil_logic_nd(
+    req: V1RequestBase, driver: Browser, method: str
+) -> ChallengeResolutionT:
     res = ChallengeResolutionT({})
     res.status = STATUS_OK
     res.message = ""
 
     # navigate to the page
-    logging.debug(f'Navigating to... {req.url}')
-    if method == 'POST':
+    logging.debug(f"Navigating to... {req.url}")
+    if method == "POST":
         post_content = await _post_request_nd(req)
         tab = await driver.get("data:text/html;charset=utf-8," + post_content)
     else:
@@ -255,7 +304,7 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
     if req.cookies is not None and len(req.cookies) > 0:
         await tab.wait(1)
         await tab
-        logging.debug(f'Setting cookies...')
+        logging.debug(f"Setting cookies...")
 
         # Get cleaned domain
         domain = (urlparse(req.url).netloc).split(".")
@@ -270,18 +319,22 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
             if domain not in cookie["domain"]:
                 logging.debug(f"Skipping cookie from domain {cookie['domain']}")
                 continue
-            logging.debug(f"Appending cookie '{cookie['name']}' for '{cookie['domain']}'...")
-            cookies.append(utils.nd.cdp.network.CookieParam(
-                name=cookie["name"],
-                value=cookie["value"],
-                path=cookie["path"],
-                domain=cookie["domain"]
-            ))
+            logging.debug(
+                f"Appending cookie '{cookie['name']}' for '{cookie['domain']}'..."
+            )
+            cookies.append(
+                utils.nd.cdp.network.CookieParam(
+                    name=cookie["name"],
+                    value=cookie["value"],
+                    path=cookie["path"],
+                    domain=cookie["domain"],
+                )
+            )
 
         await driver.cookies.set_all(cookies)
 
         # reload the page
-        if method == 'POST':
+        if method == "POST":
             tab = await driver.get(post_content)
         else:
             logging.debug("Reloading tab...")
@@ -301,14 +354,18 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
     # find access denied titles
     for title in ACCESS_DENIED_TITLES:
         if title == page_title:
-            raise Exception('Cloudflare has blocked this request. '
-                            'Probably your IP is banned for this site, check in your web browser.')
+            raise Exception(
+                "Cloudflare has blocked this request. "
+                "Probably your IP is banned for this site, check in your web browser."
+            )
     # find access denied selectors
     for selector in ACCESS_DENIED_SELECTORS:
         found_elements = await tab.query_selector(selector=selector, _node=doc)
         if found_elements is not None:
-            raise Exception('Cloudflare has blocked this request. '
-                            'Probably your IP is banned for this site, check in your web browser.')
+            raise Exception(
+                "Cloudflare has blocked this request. "
+                "Probably your IP is banned for this site, check in your web browser."
+            )
 
     # find challenge by title
     challenge_found = False
@@ -335,7 +392,9 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
 
                 # wait until the title changes
                 for title in CHALLENGE_TITLES:
-                    logging.debug("Waiting for title (attempt " + str(attempt) + "): " + title)
+                    logging.debug(
+                        "Waiting for title (attempt " + str(attempt) + "): " + title
+                    )
                     if tab.target.title != title:
                         continue
                     start_time = time.time()
@@ -350,11 +409,21 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
                 # then wait until all the selectors disappear
                 for selector in CHALLENGE_SELECTORS:
                     await tab
-                    logging.debug("Waiting for selector (attempt " + str(attempt) + "): " + selector)
-                    if await tab.query_selector(selector=selector, _node=doc) is not None:
+                    logging.debug(
+                        "Waiting for selector (attempt "
+                        + str(attempt)
+                        + "): "
+                        + selector
+                    )
+                    if (
+                        await tab.query_selector(selector=selector, _node=doc)
+                        is not None
+                    ):
                         start_time = time.time()
                         while True:
-                            element = await tab.query_selector(selector=selector, _node=doc)
+                            element = await tab.query_selector(
+                                selector=selector, _node=doc
+                            )
                             if not element:
                                 break
                             if time.time() - start_time > SHORT_TIMEOUT:
@@ -393,7 +462,9 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
     challenge_res.userAgent = await utils.get_user_agent_nd(driver)
 
     if not req.returnOnlyCookies:
-        challenge_res.headers = {}  # TO-DO: nodriver should support this, let's add it later
+        challenge_res.headers = (
+            {}
+        )  # TO-DO: nodriver should support this, let's add it later
         logging.debug("requesting html content from the tab")
         challenge_res.response = await tab.get_content(_node=doc)
 
@@ -410,13 +481,13 @@ async def _evil_logic_nd(req: V1RequestBase, driver: Browser, method: str) -> Ch
     res.result = challenge_res
     return res
 
+
 async def click_verify_nd(tab: Tab):
     try:
         logging.debug("Checking if cloudflare captcha is present on page...")
         await tab.wait(2)
         await tab
-        cf_element = await tab.find(text="cf-chl-widget-",
-                                    timeout=SHORT_TIMEOUT)
+        cf_element = await tab.find(text="cf-chl-widget-", timeout=SHORT_TIMEOUT)
 
         if cf_element:
             logging.debug("Cloudflare captcha found!")
@@ -426,15 +497,23 @@ async def click_verify_nd(tab: Tab):
             await tab.browser.update_targets()
             # get the iframe target
             cf_tab = next(
-                (target for target in tab.browser.targets if "challenges.cloudflare.com" in target.url), None
+                (
+                    target
+                    for target in tab.browser.targets
+                    if "challenges.cloudflare.com" in target.url
+                ),
+                None,
             )
             if cf_tab is None:
                 raise ValueError("Captcha iframe not found!")
+
+            # Fix iframe being denied access by websocket
+            cf_tab.websocket_url = cf_tab.websocket_url.replace("iframe", "page")
+
             logging.debug("Found captcha iframe!")
 
             # get checkbox from iframe
-            cf_checkbox = await cf_tab.find(text="checkbox",
-                                            timeout=SHORT_TIMEOUT)
+            cf_checkbox = await cf_tab.find(text="checkbox", timeout=SHORT_TIMEOUT)
 
             await cf_checkbox.mouse_click()
             logging.debug("Checkbox element clicked!")
@@ -443,18 +522,19 @@ async def click_verify_nd(tab: Tab):
 
     await asyncio.sleep(2)
 
+
 async def _post_request_nd(req: V1RequestBase) -> str:
     post_form = f'<form id="hackForm" action="{req.url}" method="POST">'
-    query_string = req.postData if req.postData[0] != '?' else req.postData[1:]
-    pairs = query_string.split('&')
+    query_string = req.postData if req.postData[0] != "?" else req.postData[1:]
+    pairs = query_string.split("&")
     for pair in pairs:
-        parts = pair.split('=')
+        parts = pair.split("=")
         # noinspection PyBroadException
         try:
             name = unquote(parts[0])
         except Exception:
             name = parts[0]
-        if name == 'submit':
+        if name == "submit":
             continue
         # noinspection PyBroadException
         try:
@@ -462,7 +542,7 @@ async def _post_request_nd(req: V1RequestBase) -> str:
         except Exception:
             value = parts[1]
         post_form += f'<input type="text" name="{name}" value="{value}"><br>'
-    post_form += '</form>'
+    post_form += "</form>"
     html_content = f"""
         <!DOCTYPE html>
         <html>

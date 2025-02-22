@@ -5,21 +5,20 @@ import atexit
 import json
 import logging
 import os
-import pickle
 import pathlib
+import pickle
 import typing
 import urllib.parse
 import urllib.request
 import warnings
 import subprocess
 from collections import defaultdict
-from typing import List, Union, Tuple
+from typing import List, Tuple, Union
 
 from .. import cdp
-from . import util
-from . import tab
+from . import tab, util
 from ._contradict import ContraDict
-from .config import PathLike, Config, is_posix
+from .config import Config, PathLike, is_posix
 from .connection import Connection
 
 logger = logging.getLogger(__name__)
@@ -212,7 +211,7 @@ class Browser:
             new_target = Tab(
                 (
                     f"ws://{self.config.host}:{self.config.port}"
-                    f"/devtools/page"  # all types are 'page' internally in chrome apparently
+                    f"/devtools/{target_info.type_ or 'page'}"  # all types are 'page' internally in chrome apparently
                     f"/{target_info.target_id}"
                 ),
                 target=target_info,
@@ -255,20 +254,24 @@ class Browser:
                 )
             )
             # get the connection matching the new target_id from our inventory
-            connection = next(
+            connection: tab.Tab = next(
                 filter(
                     lambda item: item.type_ == "page" and item.target_id == target_id,
                     self.targets,
                 )
             )
+            connection.browser = self
 
         else:
             # first tab from browser.tabs
-            connection = next(filter(lambda item: item.type_ == "page", self.targets))
+            connection: tab.Tab = next(
+                filter(lambda item: item.type_ == "page", self.targets)
+            )
             # use the tab to navigate to new url
             frame_id, loader_id, *_ = await connection.send(cdp.page.navigate(url))
             # update the frame_id on the tab
             connection.frame_id = frame_id
+            connection.browser = self
 
         await connection.sleep(0.25)
         return connection
@@ -278,6 +281,7 @@ class Browser:
         if not self:
             warnings.warn("use ``await Browser.create()`` to create a new instance")
             return
+
         if self._process or self._process_pid:
             if self._process.returncode is not None:
                 return await self.create(config=self.config)
@@ -461,8 +465,9 @@ class Browser:
         await self.connection.send(cdp.browser.grant_permissions(permissions))
 
     async def tile_windows(self, windows=None, max_columns: int = 0):
-        import mss
         import math
+
+        import mss
 
         m = mss.mss()
         screen, screen_width, screen_height = 3 * (None,)
@@ -525,7 +530,8 @@ class Browser:
     async def update_targets(self):
         targets: List[cdp.target.TargetInfo]
         targets = await self._get_targets()
-
+        target_ids = [t.target_id for t in targets]
+        existing_target_ids = [t.target_id for t in self.targets]
         for t in targets:
             for existing_tab in self.targets:
                 existing_target = existing_tab.target

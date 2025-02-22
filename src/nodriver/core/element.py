@@ -7,10 +7,10 @@ import pathlib
 import secrets
 import typing
 
+from .. import cdp
 from . import util
 from ._contradict import ContraDict
 from .config import PathLike
-from .. import cdp
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +190,13 @@ class Element:
     def tab(self):
         return self._tab
 
+    @property
+    def shadow_children(self):
+        if self.shadow_roots:
+            root = self.shadow_roots[0]
+            if root.shadow_root_type == cdp.dom.ShadowRootType.OPEN_:
+                return [create(child, self.tab) for child in root.children]
+
     def __getattr__(self, item):
         # if attribute is not found on the element python object
         # check if it may be present in the element attributes (eg, href=, src=, alt=)
@@ -198,10 +205,8 @@ class Element:
         x = getattr(self.attrs, item, None)
         if x:
             return x
-
-    #     x = getattr(self.node, item, None)
-    #
-    #     return x
+        # else:
+        #     logger.debug("could not find attribute '%s' in %s" % (item, self.attrs))
 
     def __setattr__(self, key, value):
         if key[0] != "_":
@@ -273,13 +278,10 @@ class Element:
         """
         if _node:
             doc = _node
-            # self._node = _node
-            # self._children.clear()
             self._parent = None
         else:
             doc = await self._tab.send(cdp.dom.get_document(-1, True))
             self._parent = None
-        # if self.node_name != "IFRAME":
         updated_node = util.filter_recurse(
             doc, lambda n: n.backend_node_id == self._node.backend_node_id
         )
@@ -858,9 +860,9 @@ class Element:
         :rtype: str
         """
 
-        import urllib.parse
-        import datetime
         import base64
+        import datetime
+        import urllib.parse
 
         pos = await self.get_position()
         if not pos:

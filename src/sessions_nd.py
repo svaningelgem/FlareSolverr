@@ -26,8 +26,12 @@ class SessionsStorage:
     def __init__(self):
         self.sessions = {}
 
-    async def create(self, session_id: Optional[str] = None, proxy: Optional[dict] = None,
-               force_new: Optional[bool] = False) -> Tuple[Session, bool]:
+    async def create(
+        self,
+        session_id: Optional[str] = None,
+        proxy: Optional[dict] = None,
+        force_new: Optional[bool] = False,
+    ) -> Tuple[Session, bool]:
         """create new instance of Browser if necessary,
         assign defined (or newly generated) session_id to the instance
         and returns the session object. If a new session has been created
@@ -70,11 +74,15 @@ class SessionsStorage:
         await utils.after_run_cleanup(driver=session.driver)
         return True
 
-    async def get(self, session_id: str, ttl: Optional[timedelta] = None) -> Tuple[Session, bool]:
+    async def get(
+        self, session_id: str, ttl: Optional[timedelta] = None
+    ) -> Tuple[Session, bool]:
         session, fresh = await self.create(session_id)
 
         if ttl is not None and not fresh and session.lifetime() > ttl:
-            logging.debug(f'session\'s lifetime has expired, so the session is recreated (session_id={session_id})')
+            logging.debug(
+                f"session's lifetime has expired, so the session is recreated (session_id={session_id})"
+            )
             session, fresh = await self.create(session_id, force_new=True)
 
         return session, fresh
