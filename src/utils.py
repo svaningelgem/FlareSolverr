@@ -6,6 +6,8 @@ import shutil
 import urllib.parse
 import tempfile
 import asyncio
+
+import platform
 import psutil
 from bs4 import BeautifulSoup
 
@@ -201,8 +203,10 @@ async def get_webdriver_nd(proxy: dict = None) -> nd.Browser:
     # this option removes the zygote sandbox (it seems that the resolution is a bit faster)
     # options.add_argument('--no-zygote')
     # attempt to fix Docker ARM32 build
-    # options.add_argument('--disable-gpu-sandbox')
-    # options.add_argument('--disable-software-rasterizer')
+    # IS_ARMARCH = platform.machine().startswith(('arm', 'aarch'))
+    # if IS_ARMARCH:
+    #     options.add_argument('--disable-gpu-sandbox')
+    #     options.add_argument('--disable-software-rasterizer')
     # options.add_argument('--ignore-certificate-errors')
     # options.add_argument('--ignore-ssl-errors')
     # fix GL errors in ASUSTOR NAS
@@ -271,9 +275,11 @@ def get_webdriver_uc(proxy: dict = None) -> WebDriver:
     options.add_argument("--disable-dev-shm-usage")
     # this option removes the zygote sandbox (it seems that the resolution is a bit faster)
     options.add_argument("--no-zygote")
-    # attempt to fix Docker ARM32 build
-    options.add_argument("--disable-gpu-sandbox")
-    options.add_argument("--disable-software-rasterizer")
+    IS_ARMARCH = platform.machine().startswith(('arm', 'aarch'))
+    if IS_ARMARCH:
+        options.add_argument('--disable-gpu-sandbox')
+        options.add_argument('--disable-software-rasterizer')
+
     options.add_argument("--ignore-certificate-errors")
     options.add_argument("--ignore-ssl-errors")
     # fix GL errors in ASUSTOR NAS
