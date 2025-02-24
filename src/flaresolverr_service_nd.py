@@ -1,13 +1,12 @@
+import asyncio
 import logging
 import platform
+from datetime import timedelta
+from typing import List
+from urllib.parse import unquote, urlparse
+
 import sys
 import time
-import asyncio
-from datetime import timedelta
-from urllib.parse import unquote, urlparse
-from typing import List
-from nodriver import Browser, Tab
-from sessions_nd import SessionsStorage
 
 import utils
 from dtos import (
@@ -18,6 +17,8 @@ from dtos import (
     V1RequestBase,
     V1ResponseBase,
 )
+from nodriver import Browser, Tab
+from sessions_nd import SessionsStorage
 
 # from sessions import SessionsStorage
 
@@ -229,7 +230,7 @@ async def _cmd_sessions_destroy_nd(req: V1RequestBase) -> V1ResponseBase:
 
 
 async def _resolve_challenge_nd(
-    req: V1RequestBase, method: str
+        req: V1RequestBase, method: str
 ) -> ChallengeResolutionT:
     timeout = req.maxTimeout / 1000
     driver = None
@@ -282,7 +283,7 @@ def get_status_code(event):
 
 
 async def _evil_logic_nd(
-    req: V1RequestBase, driver: Browser, method: str
+        req: V1RequestBase, driver: Browser, method: str
 ) -> ChallengeResolutionT:
     res = ChallengeResolutionT({})
     res.status = STATUS_OK
@@ -392,45 +393,54 @@ async def _evil_logic_nd(
 
                 # wait until the title changes
                 for title in CHALLENGE_TITLES:
-                    logging.debug(
-                        "Waiting for title (attempt " + str(attempt) + "): " + title
-                    )
+                    logging.debug(f"Waiting for title (attempt {attempt}): {title} [Current title: {tab.target.title}]")
                     if tab.target.title != title:
+                        logging.debug(" * nope")
                         continue
                     start_time = time.time()
                     while True:
                         current_title = tab.target.title
+                        logging.debug(f" * current title: {current_title}")
                         if current_title not in CHALLENGE_TITLES:
+                            logging.debug(" * nope2")
                             break
                         if time.time() - start_time > SHORT_TIMEOUT:
+                            logging.debug(" * timeout")
                             raise TimeoutError
+                        logging.debug(" * still same title")
                         await tab.wait(0.1)
 
                 # then wait until all the selectors disappear
+                logging.debug("Waiting for CHALLENGE_SELECTORS")
                 for selector in CHALLENGE_SELECTORS:
+                    logging.debug("Waiting for tab")
                     await tab
-                    logging.debug(
-                        "Waiting for selector (attempt "
-                        + str(attempt)
-                        + "): "
-                        + selector
-                    )
+                    logging.debug(f"Waiting for selector (attempt {attempt}): {selector}")
                     if (
-                        await tab.query_selector(selector=selector, _node=doc)
-                        is not None
+                            await tab.query_selector(selector=selector, _node=doc)
+                            is not None
                     ):
+                        logging.debug(" * found selector")
                         start_time = time.time()
                         while True:
                             element = await tab.query_selector(
                                 selector=selector, _node=doc
                             )
+                            logging.debug(" * finised querying (again)")
                             if not element:
+                                logging.debug(" * ok next")
                                 break
                             if time.time() - start_time > SHORT_TIMEOUT:
+                                logging.debug(" * timeout reached")
                                 raise TimeoutError
+                            logging.debug(" * deleting element")
                             del element
+                            logging.debug(" * sleeping")
                             await asyncio.sleep(0.1)
 
+                    logging.debug("Next selector")
+
+                logging.debug("All elements gone")
                 # all elements not found
                 break
 

@@ -422,7 +422,7 @@ def _evil_logic(req: V1RequestBase, driver: WebDriver, method: str) -> Challenge
 
                 # wait until the title changes
                 for title in CHALLENGE_TITLES:
-                    logging.debug("Waiting for title (attempt " + str(attempt) + "): " + title)
+                    logging.debug("Waiting BOOM for title (attempt " + str(attempt) + "): " + title)
                     WebDriverWait(driver, SHORT_TIMEOUT).until_not(title_is(title))
 
                 # then wait until all the selectors disappear
