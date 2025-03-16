@@ -8,6 +8,9 @@ import tempfile
 import asyncio
 
 import platform
+from functools import lru_cache
+from sysconfig import get_python_version
+
 import psutil
 from bs4 import BeautifulSoup
 
@@ -15,9 +18,6 @@ from selenium.webdriver.chrome.webdriver import WebDriver
 import undetected_chromedriver as uc
 import nodriver as nd
 
-FLARESOLVERR_VERSION = None
-DRIVER_SELECTION = None
-PLATFORM_VERSION = None
 CHROME_EXE_PATH = None
 CHROME_MAJOR_VERSION = None
 USER_AGENT = None
@@ -26,19 +26,18 @@ PATCHED_DRIVER_PATH = None
 CLOUDFLARE_EXTENSION_DIR = None
 
 
+@lru_cache(1)
 def get_config_log_html() -> bool:
     return os.environ.get("LOG_HTML", "false").lower() == "true"
 
 
+@lru_cache(1)
 def get_config_headless() -> bool:
     return os.environ.get("HEADLESS", "true").lower() == "true"
 
 
+@lru_cache(1)
 def get_flaresolverr_version() -> str:
-    global FLARESOLVERR_VERSION
-    if FLARESOLVERR_VERSION is not None:
-        return FLARESOLVERR_VERSION
-
     package_path = os.path.join(
         os.path.dirname(os.path.abspath(__file__)), os.pardir, "package.json"
     )
@@ -47,24 +46,17 @@ def get_flaresolverr_version() -> str:
             os.path.dirname(os.path.abspath(__file__)), "package.json"
         )
     with open(package_path) as f:
-        FLARESOLVERR_VERSION = json.loads(f.read())["version"]
-        return FLARESOLVERR_VERSION
+        return json.loads(f.read())["version"]
 
 
+@lru_cache(1)
 def get_driver_selection() -> str:
-    global DRIVER_SELECTION
-    if DRIVER_SELECTION is not None:
-        return DRIVER_SELECTION
-    DRIVER_SELECTION = os.environ.get("DRIVER", "nodriver")
-    return DRIVER_SELECTION
+    return os.environ.get("DRIVER", "nodriver")
 
 
+@lru_cache(1)
 def get_current_platform() -> str:
-    global PLATFORM_VERSION
-    if PLATFORM_VERSION is not None:
-        return PLATFORM_VERSION
-    PLATFORM_VERSION = os.name
-    return PLATFORM_VERSION
+    return os.name
 
 
 def create_proxy_extension(proxy: dict) -> str:
@@ -238,7 +230,7 @@ async def get_webdriver_nd(proxy: dict = None) -> nd.Browser:
     # note: headless mode is detected (headless = True)
     # we launch the browser in head-full mode with the window hidden
     if get_config_headless():
-        if PLATFORM_VERSION == "nt":
+        if get_current_platform() == "nt":
             options.windows_headless = True
         else:
             start_xvfb_display()
@@ -246,7 +238,7 @@ async def get_webdriver_nd(proxy: dict = None) -> nd.Browser:
     # options.headless = True or False
 
     # Add browser binary path for Windows
-    if PLATFORM_VERSION == "nt":
+    if get_current_platform() == "nt":
         options.browser_executable_path = CHROME_EXE_PATH
 
     try:
@@ -311,7 +303,7 @@ def get_webdriver_uc(proxy: dict = None) -> WebDriver:
     # we launch the browser in head-full mode with the window hidden
     windows_headless = False
     if get_config_headless():
-        if PLATFORM_VERSION == "nt":
+        if get_current_platform() == "nt":
             windows_headless = True
         else:
             start_xvfb_display()
@@ -406,7 +398,7 @@ def get_chrome_major_version() -> str:
     if CHROME_MAJOR_VERSION is not None:
         return CHROME_MAJOR_VERSION
 
-    if PLATFORM_VERSION == "nt":
+    if get_current_platform() == "nt":
         # Example: '104.0.5112.79'
         try:
             complete_version = extract_version_nt_executable(get_chrome_exe_path())
@@ -508,7 +500,7 @@ def get_user_agent_uc(driver=None) -> str:
         raise Exception("Error getting browser User-Agent. " + str(e))
     finally:
         if driver is not None:
-            if PLATFORM_VERSION == "nt":
+            if get_current_platform() == "nt":
                 driver.close()
             driver.quit()
 

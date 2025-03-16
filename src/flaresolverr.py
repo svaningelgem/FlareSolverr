@@ -54,7 +54,7 @@ def controller_v1():
     Controller v1
     """
     req = V1RequestBase(request.json)
-    if utils.DRIVER_SELECTION == "nodriver":
+    if utils.get_driver_selection() == "nodriver":
         res = asyncio.run(flaresolverr_service_nd.controller_v1_endpoint_nd(req))
     else:
         res = flaresolverr_service.controller_v1_endpoint(req)
@@ -129,7 +129,7 @@ if __name__ == "__main__":
     utils.get_current_platform()
 
     # test browser installation for undetected-chromedriver or start loop for nodriver
-    if utils.DRIVER_SELECTION == "nodriver":
+    if utils.get_driver_selection() == "nodriver":
         asyncio.run(flaresolverr_service_nd.test_browser_installation_nd())
     else:
         flaresolverr_service.test_browser_installation_uc()
