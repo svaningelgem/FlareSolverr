@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Generic, Optional, TypeVar, Union
 
-from dtos import ChallengeResolutionT, HealthResponse, IndexResponse, V1RequestBase, V1ResponseBase
+from dtos import ChallengeResolutionT, HealthResponse, IndexResponse, Request, Response
 
 IS_ARMARCH = platform.machine().startswith(("arm", "aarch"))
 
@@ -78,43 +78,43 @@ class BaseService(ABC, Generic[DriverT]):
         pass
 
     @abstractmethod
-    def controller_v1_endpoint(self, req: V1RequestBase) -> Union[V1ResponseBase, Coroutine[Any, Any, V1ResponseBase]]:
+    def controller_v1_endpoint(self, req: Request) -> Union[Response, Coroutine[Any, Any, Response]]:
         """Handle controller V1 endpoint"""
         pass
 
     @abstractmethod
-    def _controller_v1_handler(self, req: V1RequestBase) -> Union[V1ResponseBase, Coroutine[Any, Any, V1ResponseBase]]:
+    def _controller_v1_handler(self, req: Request) -> Union[Response, Coroutine[Any, Any, Response]]:
         """Process controller V1 request"""
         pass
 
     @abstractmethod
-    def _cmd_request_get(self, req: V1RequestBase) -> Union[V1ResponseBase, Coroutine[Any, Any, V1ResponseBase]]:
+    def _cmd_request_get(self, req: Request) -> Union[Response, Coroutine[Any, Any, Response]]:
         """Handle request.get command"""
         pass
 
     @abstractmethod
-    def _cmd_request_post(self, req: V1RequestBase) -> Union[V1ResponseBase, Coroutine[Any, Any, V1ResponseBase]]:
+    def _cmd_request_post(self, req: Request) -> Union[Response, Coroutine[Any, Any, Response]]:
         """Handle request.post command"""
         pass
 
     @abstractmethod
-    def _cmd_sessions_create(self, req: V1RequestBase) -> Union[V1ResponseBase, Coroutine[Any, Any, V1ResponseBase]]:
+    def _cmd_sessions_create(self, req: Request) -> Union[Response, Coroutine[Any, Any, Response]]:
         """Handle sessions.create command"""
         pass
 
     @abstractmethod
-    def _cmd_sessions_list(self, req: V1RequestBase) -> Union[V1ResponseBase, Coroutine[Any, Any, V1ResponseBase]]:
+    def _cmd_sessions_list(self, req: Request) -> Union[Response, Coroutine[Any, Any, Response]]:
         """Handle sessions.list command"""
         pass
 
     @abstractmethod
-    def _cmd_sessions_destroy(self, req: V1RequestBase) -> Union[V1ResponseBase, Coroutine[Any, Any, V1ResponseBase]]:
+    def _cmd_sessions_destroy(self, req: Request) -> Union[Response, Coroutine[Any, Any, Response]]:
         """Handle sessions.destroy command"""
         pass
 
     @abstractmethod
     def _resolve_challenge(
-        self, req: V1RequestBase, method: str
+        self, req: Request, method: str
     ) -> Union[ChallengeResolutionT, Coroutine[Any, Any, ChallengeResolutionT]]:
         """Resolve CloudFlare challenge"""
         pass

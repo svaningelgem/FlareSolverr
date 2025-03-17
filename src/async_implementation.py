@@ -1,5 +1,4 @@
 import asyncio
-import logging
 import platform
 import sys
 import time
@@ -8,17 +7,18 @@ from typing import Optional, cast
 from urllib.parse import unquote, urlparse
 from uuid import uuid1
 
+from loguru import logger
+
 import utils
 from abstract_base import BaseService, BaseSession, BaseSessionsStorage
 from dtos import (
-    STATUS_ERROR,
     STATUS_OK,
     ChallengeResolutionResultT,
     ChallengeResolutionT,
     HealthResponse,
     IndexResponse,
-    V1RequestBase,
-    V1ResponseBase,
+    Request,
+    Response,
 )
 from nodriver import Browser, Tab
 
@@ -101,7 +101,7 @@ class AsyncSessionsStorage(BaseSessionsStorage[Browser]):
         session, fresh = await self.create(session_id)
 
         if ttl is not None and not fresh and session.lifetime() > ttl:
-            logging.debug(f"Session lifetime expired, recreating (session_id={session_id})")
+            logger.debug(f"Session lifetime expired, recreating (session_id={session_id})")
             session, fresh = await self.create(session_id, force_new=True)
 
         return session, fresh
@@ -112,7 +112,7 @@ class AsyncService(BaseService[Browser]):
 
     def __init__(self):
         super().__init__()
-        self.sessions_storage = AsyncSessionsStorage()
+        self.sessions_storage: AsyncSessionsStorage = AsyncSessionsStorage()
 
     async def get_status_code(self, event):
         """Monitor network request status code"""
@@ -122,13 +122,13 @@ class AsyncService(BaseService[Browser]):
     async def click_verify_nd(self, tab: Tab):
         """Try to click on Cloudflare verification elements for nodriver"""
         try:
-            logging.debug("Checking if cloudflare captcha is present on page...")
+            logger.debug("Checking if cloudflare captcha is present on page...")
             await tab.wait(2)
             await tab
             cf_element = await tab.find(text="cf-chl-widget-", timeout=SHORT_TIMEOUT)
 
             if cf_element:
-                logging.debug("Cloudflare captcha found!")
+                logger.debug("Cloudflare captcha found!")
 
                 # update targets before looking for the iframe
                 # nodriver list it in LOG_LEVEL debug but not in info
@@ -144,19 +144,19 @@ class AsyncService(BaseService[Browser]):
                 # Fix iframe being denied access by websocket
                 cf_tab.websocket_url = cf_tab.websocket_url.replace("iframe", "page")
 
-                logging.debug("Found captcha iframe!")
+                logger.debug("Found captcha iframe!")
 
                 # get checkbox from iframe
                 cf_checkbox = await cf_tab.find(text="checkbox", timeout=SHORT_TIMEOUT)
 
                 await cf_checkbox.mouse_click()
-                logging.debug("Checkbox element clicked!")
+                logger.debug("Checkbox element clicked!")
         except Exception as e:
-            logging.debug(f"Cloudflare element not found on the page - {str(e)}")
+            logger.debug(f"Cloudflare element not found on the page - {str(e)}")
 
         await asyncio.sleep(2)
 
-    async def _post_request_nd(self, req: V1RequestBase) -> str:
+    async def _post_request_nd(self, req: Request) -> str:
         """Create HTML content for POST request submission"""
         post_form = f'<form id="hackForm" action="{req.url}" method="POST">'
         query_string = req.post_data if req.post_data[0] != "?" else req.post_data[1:]  # Updated variable name
@@ -187,60 +187,51 @@ class AsyncService(BaseService[Browser]):
         return html_content
 
     async def test_browser_installation(self):
-        logging.info("Testing web browser installation...")
-        logging.info("Platform: " + platform.platform())
+        logger.info("Testing web browser installation...")
+        logger.info("Platform: " + platform.platform())
 
         chrome_exe_path = utils.get_chrome_exe_path()
         if chrome_exe_path is None:
-            logging.error("Chrome / Chromium web browser not installed!")
+            logger.error("Chrome / Chromium web browser not installed!")
             sys.exit(1)
         else:
-            logging.info("Chrome / Chromium path: " + chrome_exe_path)
+            logger.info("Chrome / Chromium path: " + chrome_exe_path)
 
         chrome_major_version = utils.get_chrome_major_version()
         if chrome_major_version == "":
-            logging.error("Chrome / Chromium version not detected!")
+            logger.error("Chrome / Chromium version not detected!")
             sys.exit(1)
         else:
-            logging.info("Chrome / Chromium major version: " + chrome_major_version)
+            logger.info("Chrome / Chromium major version: " + chrome_major_version)
 
-        logging.info("Launching web browser...")
+        logger.info("Launching web browser...")
         user_agent = await utils.get_user_agent_nd()
-        logging.info("FlareSolverr User-Agent: " + user_agent)
-        logging.info("Test successful!")
+        logger.info("FlareSolverr User-Agent: " + user_agent)
+        logger.info("Test successful!")
 
     async def index_endpoint(self) -> IndexResponse:
-        res = IndexResponse({})
-        res.msg = "FlareSolverr is ready!"
-        res.version = utils.get_flaresolverr_version()
-        res.user_agent = await utils.get_user_agent_nd()
-        return res
+        return IndexResponse(
+        msg = "FlareSolverr is ready!",
+        version = utils.get_flaresolverr_version(),
+        user_agent = await utils.get_user_agent_nd(),
+        )
 
     async def health_endpoint(self) -> HealthResponse:
-        res = HealthResponse({})
-        res.status = STATUS_OK
-        return res
+        return HealthResponse(status=STATUS_OK)
 
-    async def controller_v1_endpoint(self, req: V1RequestBase) -> V1ResponseBase:
+    async def controller_v1_endpoint(self, req: Request) -> Response:
         start_ts = int(time.time() * 1000)
-        logging.info(f"Incoming request => POST /v1 body: {utils.object_to_dict(req)}")
-        try:
-            res = await self._controller_v1_handler(req)
-        except Exception as e:
-            res = V1ResponseBase({})
-            res.__error_500__ = True
-            res.status = STATUS_ERROR
-            res.message = "Error: " + str(e)
-            logging.error(res.message)
+        logger.info(f"Incoming request => POST /v1 body")
+        res = await self._controller_v1_handler(req)
 
         res.startTimestamp = start_ts
         res.endTimestamp = int(time.time() * 1000)
         res.version = utils.get_flaresolverr_version()
-        logging.debug(f"Response => POST /v1 body: {utils.object_to_dict(res)}")
-        logging.info(f"Response in {(res.endTimestamp - res.startTimestamp) / 1000} s")
+        logger.debug(f"Response => POST /v1 body: {utils.object_to_dict(res)}")
+        logger.info(f"Response in {(res.endTimestamp - res.startTimestamp) / 1000} s")
         return res
 
-    async def _controller_v1_handler(self, req: V1RequestBase) -> V1ResponseBase:
+    async def _controller_v1_handler(self, req: Request) -> Response:
         # do some validations
         if req.cmd is None:
             raise Exception("Request parameter 'cmd' is mandatory.")
@@ -250,7 +241,7 @@ class AsyncService(BaseService[Browser]):
             req.max_timeout = 60000
 
         # execute the command
-        res: V1ResponseBase
+        res: Response
         if req.cmd == "sessions.create":
             res = await self._cmd_sessions_create(req)
         elif req.cmd == "sessions.list":
@@ -266,65 +257,61 @@ class AsyncService(BaseService[Browser]):
 
         return res
 
-    async def _cmd_request_get(self, req: V1RequestBase) -> V1ResponseBase:
+    async def _cmd_request_get(self, req: Request) -> Response:
         # do some validations
         if req.url is None:
             raise Exception("Request parameter 'url' is mandatory in 'request.get' command.")
 
         challenge_res = await self._resolve_challenge(req, "GET")
-        res = V1ResponseBase({})
-        res.status = challenge_res.status
-        res.message = challenge_res.message
-        res.solution = challenge_res.result
-        return res
+        return Response(
+        status = challenge_res.status,
+        message = challenge_res.message,
+        solution = challenge_res.result,
+        )
 
-    async def _cmd_request_post(self, req: V1RequestBase) -> V1ResponseBase:
+    async def _cmd_request_post(self, req: Request) -> Response:
         # do some validations
         challenge_res = await self._resolve_challenge(req, "POST")
-        res = V1ResponseBase({})
-        res.status = challenge_res.status
-        res.message = challenge_res.message
-        res.solution = challenge_res.result
-        return res
+        return Response(
+        status = challenge_res.status,
+        message = challenge_res.message,
+        solution = challenge_res.result,
+        )
 
-    async def _cmd_sessions_create(self, req: V1RequestBase) -> V1ResponseBase:
-        logging.debug("Creating new session...")
+    async def _cmd_sessions_create(self, req: Request) -> Response:
+        logger.debug("Creating new session...")
 
         session, fresh = await self.sessions_storage.create(session_id=req.session, proxy=req.proxy)
         session_id = session.session_id
 
         if not fresh:
-            return V1ResponseBase(
-                {
-                    "status": STATUS_OK,
-                    "message": "Session already exists.",
-                    "session": session_id,
-                }
+            return Response(
+                    status= STATUS_OK,
+                    message= "Session already exists.",
+                    session= session_id,
             )
 
-        return V1ResponseBase(
-            {
-                "status": STATUS_OK,
-                "message": "Session created successfully.",
-                "session": session_id,
-            }
+        return Response(
+                status= STATUS_OK,
+                message= "Session created successfully.",
+                session= session_id,
         )
 
-    def _cmd_sessions_list(self, req: V1RequestBase) -> V1ResponseBase:
+    def _cmd_sessions_list(self, req: Request) -> Response:
         session_ids = self.sessions_storage.session_ids()
 
-        return V1ResponseBase({"status": STATUS_OK, "message": "", "sessions": session_ids})
+        return Response(status= STATUS_OK, message= "", sessions= session_ids)
 
-    async def _cmd_sessions_destroy(self, req: V1RequestBase) -> V1ResponseBase:
+    async def _cmd_sessions_destroy(self, req: Request) -> Response:
         session_id = req.session
         existed = await self.sessions_storage.destroy(session_id)
 
         if not existed:
             raise Exception("The session doesn't exist.")
 
-        return V1ResponseBase({"status": STATUS_OK, "message": "The session has been removed."})
+        return Response(status= STATUS_OK, message= "The session has been removed.")
 
-    async def _resolve_challenge(self, req: V1RequestBase, method: str) -> ChallengeResolutionT:
+    async def _resolve_challenge(self, req: Request, method: str) -> ChallengeResolutionT:
         timeout = req.max_timeout / 1000
         driver = None
         try:
@@ -334,9 +321,9 @@ class AsyncService(BaseService[Browser]):
                 session, fresh = await self.sessions_storage.get(session_id, ttl)
 
                 if fresh:
-                    logging.debug(f"new session created to perform the request (session_id={session_id})")
+                    logger.debug(f"new session created to perform the request (session_id={session_id})")
                 else:
-                    logging.debug(
+                    logger.debug(
                         f"existing session is used to perform the request (session_id={session_id}, "
                         f"lifetime={str(session.lifetime())}, ttl={str(ttl)})"
                     )
@@ -344,7 +331,7 @@ class AsyncService(BaseService[Browser]):
                 driver = session.driver
             else:
                 driver = await utils.get_webdriver_nd(req.proxy)
-                logging.debug("New instance of chromium has been created to perform the request")
+                logger.debug("New instance of chromium has been created to perform the request")
             return await asyncio.wait_for(self._evil_logic(req, driver, method), timeout=timeout)
         except asyncio.TimeoutError as e:
             raise Exception(f"Error solving the challenge. Timeout after {timeout} seconds.") from e
@@ -353,16 +340,14 @@ class AsyncService(BaseService[Browser]):
         finally:
             if not req.session and driver is not None:
                 await utils.after_run_cleanup(driver=driver)
-                logging.debug("A used instance of chromium has been destroyed")
+                logger.debug("A used instance of chromium has been destroyed")
 
-    async def _evil_logic(self, req: V1RequestBase, driver: Browser, method: str) -> ChallengeResolutionT:
+    async def _evil_logic(self, req: Request, driver: Browser, method: str) -> ChallengeResolutionT:
         """Core logic for solving Cloudflare challenges with nodriver"""
-        res = ChallengeResolutionT({})
-        res.status = STATUS_OK
-        res.message = ""
+        res = ChallengeResolutionT(status = STATUS_OK,message = "")
 
         # navigate to the page
-        logging.debug(f"Navigating to... {req.url}")
+        logger.debug(f"Navigating to... {req.url}")
         if method == "POST":
             post_content = await self._post_request_nd(req)
             tab = await driver.get("data:text/html;charset=utf-8," + post_content)
@@ -373,22 +358,22 @@ class AsyncService(BaseService[Browser]):
         if req.cookies is not None and len(req.cookies) > 0:
             await tab.wait(1)
             await tab
-            logging.debug("Setting cookies...")
+            logger.debug("Setting cookies...")
 
             # Get cleaned domain
             domain = (urlparse(req.url).netloc).split(".")
             domain = ".".join(domain[-2:])
 
             # Delete all cookies
-            logging.debug("Removing all Browser cookies...")
+            logger.debug("Removing all Browser cookies...")
             await driver.cookies.clear()
 
             cookies = []
             for cookie in req.cookies:
                 if domain not in cookie["domain"]:
-                    logging.debug(f"Skipping cookie from domain {cookie['domain']}")
+                    logger.debug(f"Skipping cookie from domain {cookie['domain']}")
                     continue
-                logging.debug(f"Appending cookie '{cookie['name']}' for '{cookie['domain']}'...")
+                logger.debug(f"Appending cookie '{cookie['name']}' for '{cookie['domain']}'...")
                 cookies.append(
                     utils.nd.cdp.network.CookieParam(
                         name=cookie["name"],
@@ -404,7 +389,7 @@ class AsyncService(BaseService[Browser]):
             if method == "POST":
                 tab = await driver.get(post_content)
             else:
-                logging.debug("Reloading tab...")
+                logger.debug("Reloading tab...")
                 await tab.reload()
 
         # wait for the page and make sure it catches the load event
@@ -415,7 +400,7 @@ class AsyncService(BaseService[Browser]):
         doc = await tab.send(utils.nd.cdp.dom.get_document(-1, True))
 
         if utils.get_config_log_html():
-            logging.debug(f"Response HTML:\n{utils.format_html(await tab.get_content(_node=doc))}")
+            logger.debug(f"Response HTML:\n{utils.format_html(await tab.get_content(_node=doc))}")
         page_title = tab.target.title
 
         # find access denied titles
@@ -439,7 +424,7 @@ class AsyncService(BaseService[Browser]):
         for title in CHALLENGE_TITLES:
             if title.lower() == page_title.lower():
                 challenge_found = True
-                logging.info("Challenge detected. Title found: " + page_title)
+                logger.info("Challenge detected. Title found: " + page_title)
                 break
         if not challenge_found:
             # find challenge by selectors
@@ -447,7 +432,7 @@ class AsyncService(BaseService[Browser]):
                 found_elements = await tab.query_selector(selector=selector, _node=doc)
                 if found_elements is not None:
                     challenge_found = True
-                    logging.info("Challenge detected. Selector found: " + selector)
+                    logger.info("Challenge detected. Selector found: " + selector)
                     break
 
         attempt = 0
@@ -459,93 +444,91 @@ class AsyncService(BaseService[Browser]):
 
                     # wait until the title changes
                     for title in CHALLENGE_TITLES:
-                        logging.debug(
+                        logger.debug(
                             f"Waiting for title (attempt {attempt}): {title} [Current title: {tab.target.title}]"
                         )
                         if tab.target.title != title:
-                            logging.debug(" * nope")
+                            logger.debug(" * nope")
                             continue
                         start_time = time.time()
                         while True:
                             current_title = tab.target.title
-                            logging.debug(f" * current title: {current_title}")
+                            logger.debug(f" * current title: {current_title}")
                             if current_title not in CHALLENGE_TITLES:
-                                logging.debug(" * nope2")
+                                logger.debug(" * nope2")
                                 break
                             if time.time() - start_time > SHORT_TIMEOUT:
-                                logging.debug(" * timeout")
+                                logger.debug(" * timeout")
                                 raise TimeoutError
-                            logging.debug(" * still same title")
+                            logger.debug(" * still same title")
                             await tab.wait(0.1)
 
                     # then wait until all the selectors disappear
-                    logging.debug("Waiting for CHALLENGE_SELECTORS")
+                    logger.debug("Waiting for CHALLENGE_SELECTORS")
                     for selector in CHALLENGE_SELECTORS:
-                        logging.debug("Waiting for tab")
+                        logger.debug("Waiting for tab")
                         await tab
-                        logging.debug(f"Waiting for selector (attempt {attempt}): {selector}")
+                        logger.debug(f"Waiting for selector (attempt {attempt}): {selector}")
                         if await tab.query_selector(selector=selector, _node=doc) is not None:
-                            logging.debug(" * found selector")
+                            logger.debug(" * found selector")
                             start_time = time.time()
                             while True:
                                 element = await tab.query_selector(selector=selector, _node=doc)
-                                logging.debug(" * finised querying (again)")
+                                logger.debug(" * finised querying (again)")
                                 if not element:
-                                    logging.debug(" * ok next")
+                                    logger.debug(" * ok next")
                                     break
                                 if time.time() - start_time > SHORT_TIMEOUT:
-                                    logging.debug(" * timeout reached")
+                                    logger.debug(" * timeout reached")
                                     raise TimeoutError
-                                logging.debug(" * deleting element")
+                                logger.debug(" * deleting element")
                                 del element
-                                logging.debug(" * sleeping")
+                                logger.debug(" * sleeping")
                                 await asyncio.sleep(0.1)
 
-                        logging.debug("Next selector")
+                        logger.debug("Next selector")
 
-                    logging.debug("All elements gone")
+                    logger.debug("All elements gone")
                     # all elements not found
                     break
 
                 except TimeoutError:
-                    logging.debug("Timeout waiting for selector")
+                    logger.debug("Timeout waiting for selector")
 
                     await self.click_verify_nd(tab)
 
             # waits until cloudflare redirection ends
-            logging.debug("Waiting for redirect")
+            logger.debug("Waiting for redirect")
             try:
                 await tab
             except Exception:
-                logging.debug("Timeout waiting for redirect")
+                logger.debug("Timeout waiting for redirect")
 
-            logging.info("Challenge solved!")
+            logger.info("Challenge solved!")
             res.message = "Challenge solved!"
         else:
-            logging.info("Challenge not detected!")
+            logger.info("Challenge not detected!")
             res.message = "Challenge not detected!"
 
-        challenge_res = ChallengeResolutionResultT({})
-        challenge_res.url = tab.target.url
-        challenge_res.status = STATUS_CODE
-        logging.debug("requesting cookies from the driver")
+        challenge_res = ChallengeResolutionResultT(url = tab.target.url,status = STATUS_CODE)
+        logger.debug("requesting cookies from the driver")
         challenge_res.cookies = await driver.cookies.get_all(requests_cookie_format=True)
-        logging.debug("requesting user agent from the driver")
+        logger.debug("requesting user agent from the driver")
         challenge_res.user_agent = await utils.get_user_agent_nd(driver)  # Updated variable name
 
         if not req.return_only_cookies:  # Updated variable name
             challenge_res.headers = []  # nodriver should support this in the future
-            logging.debug("requesting html content from the tab")
+            logger.debug("requesting html content from the tab")
             challenge_res.response = await tab.get_content(_node=doc)
 
         # Close websocket connection to reuse the driver tab
         if req.session:
-            logging.debug("tab.aclose()")
+            logger.debug("tab.aclose()")
             await tab.aclose()
         else:
-            logging.debug("tab.close()")
+            logger.debug("tab.close()")
             await tab.close()
-        logging.debug("Tab was closed")
+        logger.debug("Tab was closed")
 
         res.result = challenge_res
         return res

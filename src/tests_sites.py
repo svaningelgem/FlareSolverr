@@ -4,7 +4,7 @@ from webtest import TestApp
 
 import flaresolverr
 import utils
-from dtos import STATUS_OK, V1ResponseBase
+from dtos import STATUS_OK, Response
 
 
 def _find_obj_by_key(key: str, value: str, _list: list) -> dict | None:
@@ -17,7 +17,7 @@ def _find_obj_by_key(key: str, value: str, _list: list) -> dict | None:
 def asset_cloudflare_solution(self, res, site_url, site_text):
     self.assertEqual(res.status_code, 200)
 
-    body = V1ResponseBase(res.json)
+    body = Response(res.json)
     self.assertEqual(STATUS_OK, body.status)
     self.assertEqual("Challenge solved!", body.message)
     self.assertGreater(body.startTimestamp, 10000)

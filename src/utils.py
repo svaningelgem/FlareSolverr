@@ -18,6 +18,7 @@ from selenium.webdriver.chrome.webdriver import WebDriver
 
 import nodriver as nd
 import undetected_chromedriver as uc
+from src.dtos import Response, Request
 
 
 @lru_cache(1)
@@ -607,7 +608,9 @@ async def after_run_cleanup(driver: nd.Browser):
                 logger.debug(f"Terminating zombie Chromium process with PID: {proc.pid}")
                 proc.terminate()
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as e:
-            logger.debug(f"Error terminating process {proc.pid}: {e}")
+            message = str(e)
+            if "process no longer exists" not in message:
+                logger.debug(f"Error terminating process {proc.pid}: {message}")
 
     # Wait for all processes to terminate
     for proc in child_processes:
@@ -615,7 +618,9 @@ async def after_run_cleanup(driver: nd.Browser):
             if proc.pid == process.pid or any(name in proc.name().lower() for name in ("chromium", "chrome")):
                 proc.wait(timeout=10)
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, psutil.TimeoutExpired) as e:
-            logger.debug(f"Error waiting for process {proc.pid}: {e}")
+            message = str(e)
+            if "process no longer exists" not in message:
+                logger.debug(f"Error waiting for process {proc.pid}: {message}")
 
     # Delete Browser instance data dir
     try:
@@ -651,3 +656,17 @@ def format_html(input_html):
     return (
         f"\n==========================================\n{formatted_html}\n==========================================\n"
     )
+
+def dump(obj: Response | Request) -> None:
+    """Dump the response object in debug mode"""
+    logger.debug(f"========================================== {obj.__class__.__name__.upper()}")
+    for k, v in obj.headers.items():
+        logger.debug(f"header: {k}: {pprint.pformat(v, width=200)}")
+    logger.debug("---------------------------------------------------")
+    for k, v in vars(obj).items():
+        if k == "headers":
+            continue
+        if k == "solution":
+            v = {**v, "response": v["response"][:200]}
+        logger.debug(f"{k}: {pprint.pformat(v, width=200)}")
+    logger.debug(f"========================================== /{obj.__class__.__name__.upper()}")

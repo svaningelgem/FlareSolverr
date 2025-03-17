@@ -14,9 +14,9 @@ from loguru import logger
 import utils
 from bottle_plugins.error_plugin import error_plugin
 from bottle_plugins.logger_plugin import logger_plugin
-from dtos import V1RequestBase
+from dtos import Request
 import service_factory
-
+from src.dtos import STATUS_ERROR
 
 
 def call_service(method_name: str, *args, **kwargs) -> Any:
@@ -105,37 +105,31 @@ def controller_v1():
     """
     Controller v1
     """
-    # Deep log request details
-    start_time = time.time()
-    request_id = f"req-{int(start_time * 1000) % 10000:04d}"
-    logger.configure(extra={"request_id": request_id})
+    try:
+        # Deep log request details
+        start_time = time.time()
+        request_id = f"req-{int(start_time * 1000) % 10000:04d}"
 
-    logger.info("Handling POST request to /v1")
-    request_body = request.json if request.json else {}
-    request_headers = dict(request.headers.items())
+        logger.info("Handling POST request to /v1")
+        request_body = request.json or {}
+        req = Request(**request_body, headers=request.headers)
+        utils.dump(req)
 
-    logger.debug(f"Request headers: {pprint.pformat(request_headers)}")
-    logger.debug(f"Request body: {pprint.pformat(request_body)}")
+        # Call service method and handle response
+        res = call_service("controller_v1_endpoint", req)
 
-    req = V1RequestBase(request_body)
+        utils.dump(res)
+        result = utils.object_to_dict(res)
 
-    # Call service method and handle response
-    res = call_service("controller_v1_endpoint", req)
+        duration_ms = (time.time() - start_time) * 1000
+        logger.info(f"Request completed in {duration_ms:.2f}ms")
 
-    if res.__error_500__:
+        return result
+    except Exception as ex:
+        logger.exception(ex)
+
         response.status = 500
-
-    result = utils.object_to_dict(res)
-    logger.debug(f"Response body: {pprint.pformat(result)}")
-
-    # Log response headers and timing
-    response_headers = dict(response.headers.items())
-    logger.debug(f"Response headers: {pprint.pformat(response_headers)}")
-
-    duration_ms = (time.time() - start_time) * 1000
-    logger.info(f"Request completed in {duration_ms:.2f}ms")
-
-    return result
+        return {"status": STATUS_ERROR, "message": str(ex)}
 
 
 if __name__ == "__main__":

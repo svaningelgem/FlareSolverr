@@ -24,8 +24,8 @@ from dtos import (
     ChallengeResolutionT,
     HealthResponse,
     IndexResponse,
-    V1RequestBase,
-    V1ResponseBase,
+    Request,
+    Response,
 )
 
 # Constants from flaresolverr_service.py
@@ -202,7 +202,7 @@ class SyncService(BaseService[WebDriver]):
         driver.start_session()
         driver.start_session()  # required to bypass Cloudflare
 
-    def _post_request(self, req: V1RequestBase, driver: WebDriver):
+    def _post_request(self, req: Request, driver: WebDriver):
         """Handle POST requests by creating a form and submitting it"""
         post_form = f'<form id="hackForm" action="{req.url}" method="POST">'
         query_string = req.post_data if req.post_data[0] != "?" else req.post_data[1:]  # Updated variable name
@@ -233,7 +233,7 @@ class SyncService(BaseService[WebDriver]):
         driver.start_session()
         driver.start_session()  # required to bypass Cloudflare
 
-    def request_page(self, driver: WebDriver, req: V1RequestBase, method: str) -> None:
+    def request_page(self, driver: WebDriver, req: Request, method: str) -> None:
         """Request a page using either GET or POST method"""
         if method == "POST":
             self._post_request(req, driver)
@@ -268,30 +268,19 @@ class SyncService(BaseService[WebDriver]):
         logging.info("Test successful!")
 
     def index_endpoint(self) -> IndexResponse:
-        res = IndexResponse({})
-        res.msg = "FlareSolverr is ready!"
-        res.version = utils.get_flaresolverr_version()
-        res.user_agent = utils.get_user_agent_uc()
-        return res
+        return IndexResponse(
+        msg = "FlareSolverr is ready!",
+        version = utils.get_flaresolverr_version(),
+        user_agent = utils.get_user_agent_uc(),
+        )
 
     def health_endpoint(self) -> HealthResponse:
-        res = HealthResponse({})
-        res.status = STATUS_OK
-        return res
+        return HealthResponse(status=STATUS_OK)
 
-    def controller_v1_endpoint(self, req: V1RequestBase) -> V1ResponseBase:
+    def controller_v1_endpoint(self, req: Request) -> Response:
         start_ts = int(time.time() * 1000)
         logging.info(f"Incoming request => POST /v1 body: {utils.object_to_dict(req)}")
-        res: V1ResponseBase
-        try:
-            res = self._controller_v1_handler(req)
-        except Exception as e:
-            res = V1ResponseBase({})
-            res.__error_500__ = True
-            res.status = STATUS_ERROR
-            res.message = "Error: " + str(e)
-            logging.error(res.message)
-
+        res = self._controller_v1_handler(req)
         res.startTimestamp = start_ts
         res.endTimestamp = int(time.time() * 1000)
         res.version = utils.get_flaresolverr_version()
@@ -299,7 +288,7 @@ class SyncService(BaseService[WebDriver]):
         logging.info(f"Response in {(res.endTimestamp - res.startTimestamp) / 1000} s")
         return res
 
-    def _controller_v1_handler(self, req: V1RequestBase) -> V1ResponseBase:
+    def _controller_v1_handler(self, req: Request) -> Response:
         # do some validations
         if req.cmd is None:
             raise Exception("Request parameter 'cmd' is mandatory.")
@@ -309,7 +298,7 @@ class SyncService(BaseService[WebDriver]):
             req.max_timeout = 60000
 
         # execute the command
-        res: V1ResponseBase
+        res: Response
         if req.cmd == "sessions.create":
             res = self._cmd_sessions_create(req)
         elif req.cmd == "sessions.list":
@@ -325,7 +314,7 @@ class SyncService(BaseService[WebDriver]):
 
         return res
 
-    def _cmd_request_get(self, req: V1RequestBase) -> V1ResponseBase:
+    def _cmd_request_get(self, req: Request) -> Response:
         # do some validations
         if req.url is None:
             raise Exception("Request parameter 'url' is mandatory in 'request.get' command.")
@@ -333,50 +322,50 @@ class SyncService(BaseService[WebDriver]):
             raise Exception("Cannot use 'postBody' when sending a GET request.")
 
         challenge_res = self._resolve_challenge(req, "GET")
-        res = V1ResponseBase({})
+        res = Response({})
         res.status = challenge_res.status
         res.message = challenge_res.message
         res.solution = challenge_res.result
         return res
 
-    def _cmd_request_post(self, req: V1RequestBase) -> V1ResponseBase:
+    def _cmd_request_post(self, req: Request) -> Response:
         # do some validations
         if req.post_data is None:
             raise Exception("Request parameter 'post_data' is mandatory in 'request.post' command.")
 
         challenge_res = self._resolve_challenge(req, "POST")
-        res = V1ResponseBase({})
+        res = Response({})
         res.status = challenge_res.status
         res.message = challenge_res.message
         res.solution = challenge_res.result
         return res
 
-    def _cmd_sessions_create(self, req: V1RequestBase) -> V1ResponseBase:
+    def _cmd_sessions_create(self, req: Request) -> Response:
         logging.debug("Creating new session...")
 
         session, fresh = self.sessions_storage.create(session_id=req.session, proxy=req.proxy)
         session_id = session.session_id
 
         if not fresh:
-            return V1ResponseBase({"status": STATUS_OK, "message": "Session already exists.", "session": session_id})
+            return Response({"status": STATUS_OK, "message": "Session already exists.", "session": session_id})
 
-        return V1ResponseBase({"status": STATUS_OK, "message": "Session created successfully.", "session": session_id})
+        return Response({"status": STATUS_OK, "message": "Session created successfully.", "session": session_id})
 
-    def _cmd_sessions_list(self, req: V1RequestBase) -> V1ResponseBase:
+    def _cmd_sessions_list(self, req: Request) -> Response:
         session_ids = self.sessions_storage.session_ids()
 
-        return V1ResponseBase({"status": STATUS_OK, "message": "", "sessions": session_ids})
+        return Response({"status": STATUS_OK, "message": "", "sessions": session_ids})
 
-    def _cmd_sessions_destroy(self, req: V1RequestBase) -> V1ResponseBase:
+    def _cmd_sessions_destroy(self, req: Request) -> Response:
         session_id = req.session
         existed = self.sessions_storage.destroy(session_id)
 
         if not existed:
             raise Exception("The session doesn't exist.")
 
-        return V1ResponseBase({"status": STATUS_OK, "message": "The session has been removed."})
+        return Response({"status": STATUS_OK, "message": "The session has been removed."})
 
-    def _resolve_challenge(self, req: V1RequestBase, method: str) -> ChallengeResolutionT:
+    def _resolve_challenge(self, req: Request, method: str) -> ChallengeResolutionT:
         timeout = req.max_timeout / 1000 if req.max_timeout else 60
         driver = None
         try:
@@ -429,7 +418,7 @@ class SyncService(BaseService[WebDriver]):
         except Exception as e:
             logging.debug("Driver init exception: %s", repr(e))
 
-    def _evil_logic(self, req: V1RequestBase, driver: WebDriver, method: str) -> ChallengeResolutionT:
+    def _evil_logic(self, req: Request, driver: WebDriver, method: str) -> ChallengeResolutionT:
         """Core logic for solving Cloudflare challenges"""
         res = ChallengeResolutionT({})
         res.status = STATUS_OK
