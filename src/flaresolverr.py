@@ -3,26 +3,26 @@ import json
 import logging
 import os
 import sys
+import inspect
+import pprint
 
 import certifi
-from bottle import Bottle, ServerAdapter, request, response, run
+from bottle import run, response, Bottle, request, ServerAdapter
 
-import utils
-from bottle_plugins import prometheus_plugin
 from bottle_plugins.error_plugin import error_plugin
 from bottle_plugins.logger_plugin import logger_plugin
+import utils
 from dtos import V1RequestBase
-from service_factory import create_service, is_async_method
-
+from service_factory import create_service
+from method_utils import call_method
 
 class JSONErrorBottle(Bottle):
     """
-    Handle 404 errors
+    Handle 404 errors with JSON responses
     """
-
     def default_error_handler(self, res):
         response.content_type = "application/json"
-        return json.dumps({"error": res.body, "status_code": res.status_code})
+        return json.dumps(dict(error=res.body, status_code=res.status_code))
 
 
 app = JSONErrorBottle()
@@ -30,29 +30,25 @@ app = JSONErrorBottle()
 # Create the appropriate service implementation
 service = create_service()
 
-
 @app.route("/")
 def index():
     """
     Show welcome message
     """
-    if is_async_method(service, "index_endpoint"):
-        res = asyncio.run(service.index_endpoint())
-    else:
-        res = service.index_endpoint()
-    return utils.object_to_dict(res)
+    logging.info("Handling request to /")
+    res = call_method(service, 'index_endpoint')
+    result = utils.object_to_dict(res)
+    logging.debug(f"Index response: {pprint.pformat(result)}")
+    return result
 
 
 @app.route("/health")
 def health():
     """
-    Healthcheck endpoint.
-    This endpoint is special because it doesn't print traces
+    Healthcheck endpoint
     """
-    if is_async_method(service, "health_endpoint"):
-        res = asyncio.run(service.health_endpoint())
-    else:
-        res = service.health_endpoint()
+    logging.debug("Handling request to /health")
+    res = call_method(service, 'health_endpoint')
     return utils.object_to_dict(res)
 
 
@@ -61,43 +57,57 @@ def controller_v1():
     """
     Controller v1
     """
-    req = V1RequestBase(request.json)
+    # Deep log request details
+    logging.info("Handling POST request to /v1")
+    request_body = request.json if request.json else {}
+    request_headers = dict(request.headers.items())
 
-    if is_async_method(service, "controller_v1_endpoint"):
-        res = asyncio.run(service.controller_v1_endpoint(req))
-    else:
-        res = service.controller_v1_endpoint(req)
+    logging.debug(f"Request headers: {pprint.pformat(request_headers)}")
+    logging.debug(f"Request body: {pprint.pformat(request_body)}")
+
+    req = V1RequestBase(request_body)
+
+    # Call service method and handle response
+    res = call_method(service, 'controller_v1_endpoint', req)
 
     if res.__error_500__:
         response.status = 500
-    return utils.object_to_dict(res)
+
+    result = utils.object_to_dict(res)
+    logging.debug(f"Response body: {pprint.pformat(result)}")
+
+    # Log response headers
+    response_headers = dict(response.headers.items())
+    logging.debug(f"Response headers: {pprint.pformat(response_headers)}")
+
+    return result
 
 
 if __name__ == "__main__":
-    # check python version
+    # Check Python version
+    if sys.version_info < (3, 9):
+        raise Exception(
+            "The Python version is less than 3.9, a version equal to or higher is required."
+        )
 
-    # fix for HEADLESS=false in Windows binary
+    # Fix for HEADLESS=false in Windows binary
     # https://stackoverflow.com/a/27694505
     if os.name == "nt":
         import multiprocessing
-
         multiprocessing.freeze_support()
 
-    # fix ssl certificates for compiled binaries
+    # Fix SSL certificates for compiled binaries
     # https://github.com/pyinstaller/pyinstaller/issues/7229
     # https://stackoverflow.com/questions/55736855/how-to-change-the-cafile-argument-in-the-ssl-module-in-python3
     os.environ["REQUESTS_CA_BUNDLE"] = certifi.where()
     os.environ["SSL_CERT_FILE"] = certifi.where()
 
-    # validate configuration
+    # Validate configuration
     log_level = os.environ.get("LOG_LEVEL", "DEBUG").upper()
     server_host = os.environ.get("HOST", "0.0.0.0")
     server_port = int(os.environ.get("PORT", 8191))
 
-    # check if undetected-chromedriver or nodriver is selected
-    utils.get_driver_selection()
-
-    # configure logger
+    # Configure logger
     logger_format = "%(asctime)s %(levelname)-8s %(message)s"
     if log_level == "DEBUG":
         logger_format = "%(asctime)s %(levelname)-8s ReqId %(thread)s %(message)s"
@@ -107,46 +117,56 @@ if __name__ == "__main__":
         datefmt="%Y-%m-%d %H:%M:%S",
         handlers=[logging.StreamHandler(sys.stdout)],
     )
-    # disable warning traces from urllib3
+
+    # Disable warning traces from various libraries
     logging.getLogger("urllib3").setLevel(logging.ERROR)
-    logging.getLogger("selenium.webdriver.remote.remote_connection").setLevel(logging.WARNING)
+    logging.getLogger("selenium.webdriver.remote.remote_connection").setLevel(
+        logging.WARNING
+    )
     logging.getLogger("undetected_chromedriver").setLevel(logging.WARNING)
-    # nodriver is very verbose in debug
+    # Nodriver is very verbose in debug
     logging.getLogger("nd.core.element").disabled = True
     logging.getLogger("nodriver.core.browser").disabled = True
     logging.getLogger("nodriver.core.tab").disabled = True
     logging.getLogger("websockets.client").disabled = True
 
-    logging.info(f"FlareSolverr {utils.get_flaresolverr_version()}")
-    logging.debug("Debug log enabled")
-    logging.info("WARNING: YOU ARE RUNNING AN UNOFFICIAL EXPERIMENTAL BRANCH OF FLARESOLVER WHICH MAY CONTAIN BUGS.")
-    logging.info("WARNING: IF YOU ENCOUNTER ANY, PLEASE REPORT THEM ON GITHUB AT THE FOLLOWING LINK:")
+    # Log startup information
+    logging.info(f"FlareSolverr {utils.get_flaresolverr_version()} starting up")
+    logging.info(f"Server listening on http://{server_host}:{server_port}")
+    if log_level == "DEBUG":
+        logging.debug("Debug logging enabled")
+
+    # Driver type information
+    driver_type = utils.get_driver_selection()
+    logging.info(f"Using driver: {driver_type}")
+
+    logging.info(
+        "WARNING: YOU ARE RUNNING AN UNOFFICIAL EXPERIMENTAL BRANCH OF FLARESOLVER WHICH MAY CONTAIN BUGS."
+    )
+    logging.info(
+        "WARNING: IF YOU ENCOUNTER ANY, PLEASE REPORT THEM ON GITHUB AT THE FOLLOWING LINK:"
+    )
     logging.info("WARNING: https://github.com/FlareSolverr/FlareSolverr/pull/1163")
 
-    # Get current OS for global variable
-    utils.get_current_platform()
+    # Test browser installation based on driver selection
+    logging.info("Testing browser installation...")
+    call_method(service, 'test_browser_installation')
+    logging.info("Browser installation test passed")
 
-    # test browser installation based on driver selection
-    if is_async_method(service, "test_browser_installation"):
-        asyncio.run(service.test_browser_installation())
-    else:
-        service.test_browser_installation()
-
-    # start bootle plugins
-    # plugin order is important
+    # Install bottle plugins (error handling and logging)
     app.install(logger_plugin)
     app.install(error_plugin)
-    prometheus_plugin.setup()
-    app.install(prometheus_plugin.prometheus_plugin)
 
-    # start webserver
-    # default server 'wsgiref' does not support concurrent requests
+    # Start webserver
+    # Default server 'wsgiref' does not support concurrent requests
     # https://github.com/FlareSolverr/FlareSolverr/issues/680
     # https://github.com/Pylons/waitress/issues/31
     class WaitressServerPoll(ServerAdapter):
         def run(self, handler):
             from waitress import serve
-
+            logging.info(f"Starting waitress server on {self.host}:{self.port}")
             serve(handler, host=self.host, port=self.port, asyncore_use_poll=True)
+            logging.info("Server stopped")
 
+    logging.info("Starting server...")
     run(app, host=server_host, port=server_port, quiet=True, server=WaitressServerPoll)

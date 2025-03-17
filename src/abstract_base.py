@@ -7,7 +7,6 @@ from typing import Any, Generic, Optional, TypeVar, Union
 
 from dtos import ChallengeResolutionT, HealthResponse, IndexResponse, V1RequestBase, V1ResponseBase
 
-# Global variables
 IS_ARMARCH = platform.machine().startswith(("arm", "aarch"))
 
 DriverT = TypeVar("DriverT")  # Type variable for driver implementations
