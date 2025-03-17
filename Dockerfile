@@ -42,17 +42,25 @@ RUN --mount=type=cache,target=/var/cache/apt \
     dpkg -i /tmp/*.deb \
     # Install dependencies
     && apt-get update \
-    && apt-get install -y --no-install-recommends \
-       chromium chromium-common chromium-driver xvfb dumb-init \
+    && apt-get install -y --no-install-recommends chromium chromium-common chromium-driver xvfb dumb-init \
        procps curl vim xauth \
+    # Remove temporary files and hardware decoding libraries
     && rm -rf /var/lib/apt/lists/* \
     && rm -f /usr/lib/x86_64-linux-gnu/libmfxhw* \
     && rm -f /usr/lib/x86_64-linux-gnu/mfx/* \
+    # Create flaresolverr user
     && useradd --home-dir /app --shell /bin/sh flaresolverr \
     && mv /usr/bin/chromedriver chromedriver \
     && chown -R flaresolverr:flaresolverr .
 
+# Install Python dependencies
+# COPY requirements.txt .
+# RUN pip install -r requirements.txt \
+#     # Remove temporary files
+#     && rm -rf /root/.cache
+
 USER flaresolverr
+
 RUN mkdir -p "/app/.config/chromium/Crash Reports/pending"
 
 COPY src .
