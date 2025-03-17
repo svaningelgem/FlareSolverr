@@ -304,11 +304,6 @@ def find_chrome_executable(return_all=False):
         if os.path.exists(candidate) and os.access(candidate, os.X_OK):
             logger.debug("%s is a valid candidate... " % candidate)
             rv.append(candidate)
-        else:
-            logger.debug(
-                "%s is not a valid candidate because don't exist or not executable "
-                % candidate
-            )
 
     winner = None
 
@@ -323,6 +318,7 @@ def find_chrome_executable(return_all=False):
         winner = rv[0]
 
     if winner:
+        logger.debug(f"Choosing {winner}")
         return os.path.normpath(winner)
 
     raise FileNotFoundError(
