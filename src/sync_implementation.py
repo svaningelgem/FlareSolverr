@@ -1,75 +1,82 @@
 import logging
-import sys
 import platform
+import sys
 import time
 from datetime import datetime, timedelta
-from functools import wraps
-from typing import Optional, Tuple, Any, Callable, TypeVar, cast
+from typing import Optional, cast
 from urllib.parse import unquote
 from uuid import uuid1
 
-from func_timeout import func_timeout, FunctionTimedOut
-from selenium.webdriver.chrome.webdriver import WebDriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.wait import WebDriverWait
-from selenium.webdriver.support.expected_conditions import (
-    presence_of_element_located, staleness_of, title_is
-)
+from func_timeout import FunctionTimedOut, func_timeout
 from selenium.common import TimeoutException
+from selenium.webdriver.chrome.webdriver import WebDriver
 from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.expected_conditions import presence_of_element_located, staleness_of, title_is
+from selenium.webdriver.support.wait import WebDriverWait
 
 import utils
 from abstract_base import BaseService, BaseSession, BaseSessionsStorage
 from dtos import (
-    STATUS_OK,
     STATUS_ERROR,
+    STATUS_OK,
+    ChallengeResolutionResultT,
+    ChallengeResolutionT,
+    HealthResponse,
+    IndexResponse,
     V1RequestBase,
     V1ResponseBase,
-    ChallengeResolutionT,
-    IndexResponse,
-    HealthResponse,
-    ChallengeResolutionResultT
 )
 
 # Constants from flaresolverr_service.py
 ACCESS_DENIED_TITLES = [
     # Cloudflare
-    'Access denied',
+    "Access denied",
     # Cloudflare http://bitturk.net/ Firefox
-    'Attention Required! | Cloudflare'
+    "Attention Required! | Cloudflare",
 ]
 ACCESS_DENIED_SELECTORS = [
     # Cloudflare
-    'div.cf-error-title span.cf-code-label span',
+    "div.cf-error-title span.cf-code-label span",
     # Cloudflare http://bitturk.net/ Firefox
-    '#cf-error-details div.cf-error-overview h1'
+    "#cf-error-details div.cf-error-overview h1",
 ]
 CHALLENGE_TITLES = [
     # Cloudflare
-    'Just a moment...',
+    "Just a moment...",
     # DDoS-GUARD
-    'DDoS-Guard'
+    "DDoS-Guard",
 ]
 CHALLENGE_SELECTORS = [
     # Cloudflare
-    '#cf-challenge-running', '.ray_id', '.attack-box', '#cf-please-wait', '#challenge-spinner',
-    '#trk_jschal_js', '#turnstile-wrapper', '.lds-ring',
+    "#cf-challenge-running",
+    ".ray_id",
+    ".attack-box",
+    "#cf-please-wait",
+    "#challenge-spinner",
+    "#trk_jschal_js",
+    "#turnstile-wrapper",
+    ".lds-ring",
     # Custom CloudFlare for EbookParadijs, Film-Paleis, MuziekFabriek and Puur-Hollands
-    'td.info #js_info',
+    "td.info #js_info",
     # Fairlane / pararius.com
-    'div.vc div.text-box h2'
+    "div.vc div.text-box h2",
 ]
 SHORT_TIMEOUT = 1
 
+
 class SyncSession(BaseSession[WebDriver]):
     """Standard WebDriver session"""
+
     pass
+
 
 class SyncSessionsStorage(BaseSessionsStorage[WebDriver]):
     """Synchronous session storage implementation"""
 
-    def create(self, session_id: Optional[str] = None, proxy: Optional[dict] = None,
-               force_new: Optional[bool] = False) -> Tuple[SyncSession, bool]:
+    def create(
+        self, session_id: Optional[str] = None, proxy: Optional[dict] = None, force_new: Optional[bool] = False
+    ) -> tuple[SyncSession, bool]:
         session_id = session_id or str(uuid1())
 
         if force_new:
@@ -77,7 +84,7 @@ class SyncSessionsStorage(BaseSessionsStorage[WebDriver]):
 
         if self.exists(session_id):
             # Need to cast the session to the correct type
-            return cast(Tuple[SyncSession, bool], (self.sessions[session_id], False))
+            return cast(tuple[SyncSession, bool], (self.sessions[session_id], False))
 
         driver = utils.get_webdriver_uc(proxy)
         session = SyncSession(session_id, driver, datetime.now())
@@ -95,14 +102,15 @@ class SyncSessionsStorage(BaseSessionsStorage[WebDriver]):
         session.driver.quit()
         return True
 
-    def get(self, session_id: str, ttl: Optional[timedelta] = None) -> Tuple[SyncSession, bool]:
+    def get(self, session_id: str, ttl: Optional[timedelta] = None) -> tuple[SyncSession, bool]:
         session, fresh = self.create(session_id)
 
         if ttl is not None and not fresh and session.lifetime() > ttl:
-            logging.debug(f'Session lifetime expired, recreating (session_id={session_id})')
+            logging.debug(f"Session lifetime expired, recreating (session_id={session_id})")
             session, fresh = self.create(session_id, force_new=True)
 
         return session, fresh
+
 
 class SyncService(BaseService[WebDriver]):
     """Synchronous service implementation"""
@@ -114,9 +122,12 @@ class SyncService(BaseService[WebDriver]):
     def get_shadowed_iframe(self, driver: WebDriver, css_selector: str):
         """Get Shadow DOM iframe element"""
         logging.debug("Getting ShadowRoot by selector: %s", css_selector)
-        shadow_element = driver.execute_script("""
+        shadow_element = driver.execute_script(
+            """
             return (arguments[0] && document.querySelector(arguments[0])?.shadowRoot?.firstChild) || null;
-        """, css_selector)
+        """,
+            css_selector,
+        )
         if shadow_element:
             logging.debug("iframe found")
         else:
@@ -137,7 +148,7 @@ class SyncService(BaseService[WebDriver]):
             driver.switch_to.frame(iframe)
             checkbox = driver.find_element(
                 by=By.XPATH,
-                value='//label/input',
+                value="//label/input",
             )
             if checkbox:
                 actions = ActionChains(driver)
@@ -194,22 +205,22 @@ class SyncService(BaseService[WebDriver]):
     def _post_request(self, req: V1RequestBase, driver: WebDriver):
         """Handle POST requests by creating a form and submitting it"""
         post_form = f'<form id="hackForm" action="{req.url}" method="POST">'
-        query_string = req.postData if req.postData[0] != '?' else req.postData[1:]
-        pairs = query_string.split('&')
+        query_string = req.post_data if req.post_data[0] != "?" else req.post_data[1:]  # Updated variable name
+        pairs = query_string.split("&")
         for pair in pairs:
-            parts = pair.split('=')
+            parts = pair.split("=")
             try:
                 name = unquote(parts[0])
             except Exception:
                 name = parts[0]
-            if name == 'submit':
+            if name == "submit":
                 continue
             try:
                 value = unquote(parts[1])
             except Exception:
                 value = parts[1]
             post_form += f'<input type="text" name="{name}" value="{value}"><br>'
-        post_form += '</form>'
+        post_form += "</form>"
         html_content = f"""
             <!DOCTYPE html>
             <html>
@@ -224,7 +235,7 @@ class SyncService(BaseService[WebDriver]):
 
     def request_page(self, driver: WebDriver, req: V1RequestBase, method: str) -> None:
         """Request a page using either GET or POST method"""
-        if method == 'POST':
+        if method == "POST":
             self._post_request(req, driver)
         else:
             self.access_page(driver, req.url)
@@ -232,7 +243,6 @@ class SyncService(BaseService[WebDriver]):
         if utils.get_config_log_html():
             logging.debug(f"Request: {req.url}")
             logging.debug(f"Response HTML: {utils.format_html(driver.page_source)}")
-
 
     def test_browser_installation(self):
         logging.info("Testing web browser installation...")
@@ -246,7 +256,7 @@ class SyncService(BaseService[WebDriver]):
             logging.info("Chrome / Chromium path: " + chrome_exe_path)
 
         chrome_major_version = utils.get_chrome_major_version()
-        if chrome_major_version == '':
+        if chrome_major_version == "":
             logging.error("Chrome / Chromium version not detected!")
             sys.exit(1)
         else:
@@ -304,15 +314,15 @@ class SyncService(BaseService[WebDriver]):
 
         # execute the command
         res: V1ResponseBase
-        if req.cmd == 'sessions.create':
+        if req.cmd == "sessions.create":
             res = self._cmd_sessions_create(req)
-        elif req.cmd == 'sessions.list':
+        elif req.cmd == "sessions.list":
             res = self._cmd_sessions_list(req)
-        elif req.cmd == 'sessions.destroy':
+        elif req.cmd == "sessions.destroy":
             res = self._cmd_sessions_destroy(req)
-        elif req.cmd == 'request.get':
+        elif req.cmd == "request.get":
             res = self._cmd_request_get(req)
-        elif req.cmd == 'request.post':
+        elif req.cmd == "request.post":
             res = self._cmd_request_post(req)
         else:
             raise Exception(f"Request parameter 'cmd' = '{req.cmd}' is invalid.")
@@ -330,7 +340,7 @@ class SyncService(BaseService[WebDriver]):
         if req.download is not None:
             logging.warning("Request parameter 'download' was removed in FlareSolverr v2.")
 
-        challenge_res = self._resolve_challenge(req, 'GET')
+        challenge_res = self._resolve_challenge(req, "GET")
         res = V1ResponseBase({})
         res.status = challenge_res.status
         res.message = challenge_res.message
@@ -346,7 +356,7 @@ class SyncService(BaseService[WebDriver]):
         if req.download is not None:
             logging.warning("Request parameter 'download' was removed in FlareSolverr v2.")
 
-        challenge_res = self._resolve_challenge(req, 'POST')
+        challenge_res = self._resolve_challenge(req, "POST")
         res = V1ResponseBase({})
         res.status = challenge_res.status
         res.message = challenge_res.message
@@ -360,26 +370,14 @@ class SyncService(BaseService[WebDriver]):
         session_id = session.session_id
 
         if not fresh:
-            return V1ResponseBase({
-                "status": STATUS_OK,
-                "message": "Session already exists.",
-                "session": session_id
-            })
+            return V1ResponseBase({"status": STATUS_OK, "message": "Session already exists.", "session": session_id})
 
-        return V1ResponseBase({
-            "status": STATUS_OK,
-            "message": "Session created successfully.",
-            "session": session_id
-        })
+        return V1ResponseBase({"status": STATUS_OK, "message": "Session created successfully.", "session": session_id})
 
     def _cmd_sessions_list(self, req: V1RequestBase) -> V1ResponseBase:
         session_ids = self.sessions_storage.session_ids()
 
-        return V1ResponseBase({
-            "status": STATUS_OK,
-            "message": "",
-            "sessions": session_ids
-        })
+        return V1ResponseBase({"status": STATUS_OK, "message": "", "sessions": session_ids})
 
     def _cmd_sessions_destroy(self, req: V1RequestBase) -> V1ResponseBase:
         session_id = req.session
@@ -388,13 +386,10 @@ class SyncService(BaseService[WebDriver]):
         if not existed:
             raise Exception("The session doesn't exist.")
 
-        return V1ResponseBase({
-            "status": STATUS_OK,
-            "message": "The session has been removed."
-        })
+        return V1ResponseBase({"status": STATUS_OK, "message": "The session has been removed."})
 
     def _resolve_challenge(self, req: V1RequestBase, method: str) -> ChallengeResolutionT:
-        timeout = req.maxTimeout / 1000
+        timeout = req.max_timeout / 1000 if req.max_timeout else 60
         driver = None
         try:
             if req.session:
@@ -405,39 +400,44 @@ class SyncService(BaseService[WebDriver]):
                 if fresh:
                     logging.debug(f"new session created to perform the request (session_id={session_id})")
                 else:
-                    logging.debug(f"existing session is used to perform the request (session_id={session_id}, "
-                                  f"lifetime={str(session.lifetime())}, ttl={str(ttl)})")
+                    logging.debug(
+                        f"existing session is used to perform the request (session_id={session_id}, "
+                        f"lifetime={str(session.lifetime())}, ttl={str(ttl)})"
+                    )
 
                 driver = session.driver
             else:
                 driver = utils.get_webdriver_uc(req.proxy)
-                logging.debug('New instance of webdriver has been created to perform the request')
+                logging.debug("New instance of webdriver has been created to perform the request")
 
             self._init_driver(driver)
 
             return func_timeout(timeout, self._evil_logic, (req, driver, method))
-        except FunctionTimedOut:
-            raise Exception(f'Error solving the challenge. Timeout after {timeout} seconds.')
+        except FunctionTimedOut as e:
+            raise Exception(f"Error solving the challenge. Timeout after {timeout} seconds.") from e
         except Exception as e:
-            raise Exception('Error solving the challenge. ' + str(e).replace('\n', '\\n'))
+            raise Exception("Error solving the challenge. " + str(e).replace("\n", "\\n")) from e
         finally:
             if not req.session and driver is not None:
                 if utils.get_current_platform() == "nt":
                     driver.close()
                 driver.quit()
-                logging.debug('A used instance of webdriver has been destroyed')
+                logging.debug("A used instance of webdriver has been destroyed")
 
     def _init_driver(self, driver):
         try:
-            driver.execute_cdp_cmd('Page.enable', {})
-            driver.execute_cdp_cmd('Page.addScriptToEvaluateOnNewDocument', {
-                'source': """
+            driver.execute_cdp_cmd("Page.enable", {})
+            driver.execute_cdp_cmd(
+                "Page.addScriptToEvaluateOnNewDocument",
+                {
+                    "source": """
             Element.prototype._as = Element.prototype.attachShadow;
             Element.prototype.attachShadow = function (params) {
             return this._as({mode: "open"})
             };
         """
-            })
+                },
+            )
         except Exception as e:
             logging.debug("Driver init exception: %s", repr(e))
 
@@ -448,15 +448,15 @@ class SyncService(BaseService[WebDriver]):
         res.message = ""
 
         # navigate to the page
-        logging.debug(f'Navigating to... {req.url}')
+        logging.debug(f"Navigating to... {req.url}")
         self.request_page(driver, req, method)
         driver = self.get_correct_window(driver)
 
         # set cookies if required
         if req.cookies is not None and len(req.cookies) > 0:
-            logging.debug(f'Setting cookies...')
+            logging.debug("Setting cookies...")
             for cookie in req.cookies:
-                driver.delete_cookie(cookie['name'])
+                driver.delete_cookie(cookie["name"])
                 driver.add_cookie(cookie)
             # reload the page
             self.request_page(driver, req, method)
@@ -469,14 +469,18 @@ class SyncService(BaseService[WebDriver]):
         # find access denied titles
         for title in ACCESS_DENIED_TITLES:
             if title == page_title:
-                raise Exception('Cloudflare has blocked this request. '
-                                'Probably your IP is banned for this site, check in your web browser.')
+                raise Exception(
+                    "Cloudflare has blocked this request. "
+                    "Probably your IP is banned for this site, check in your web browser."
+                )
         # find access denied selectors
         for selector in ACCESS_DENIED_SELECTORS:
             found_elements = driver.find_elements(By.CSS_SELECTOR, selector)
             if len(found_elements) > 0:
-                raise Exception('Cloudflare has blocked this request. '
-                                'Probably your IP is banned for this site, check in your web browser.')
+                raise Exception(
+                    "Cloudflare has blocked this request. "
+                    "Probably your IP is banned for this site, check in your web browser."
+                )
 
         # find challenge by title
         challenge_found = False
@@ -514,7 +518,8 @@ class SyncService(BaseService[WebDriver]):
                     for selector in CHALLENGE_SELECTORS:
                         logging.debug("Waiting for selector (attempt " + str(attempt) + "): " + selector)
                         WebDriverWait(driver, SHORT_TIMEOUT).until_not(
-                            presence_of_element_located((By.CSS_SELECTOR, selector)))
+                            presence_of_element_located((By.CSS_SELECTOR, selector))
+                        )
 
                     # all elements not found
                     break
@@ -544,9 +549,9 @@ class SyncService(BaseService[WebDriver]):
         challenge_res.url = driver.current_url
         challenge_res.status = 200  # todo: fix, selenium not provides this info
         challenge_res.cookies = driver.get_cookies()
-        challenge_res.userAgent = utils.get_user_agent_uc(driver)
+        challenge_res.user_agent = utils.get_user_agent_uc(driver)  # Updated variable name
 
-        if not req.returnOnlyCookies:
+        if not req.return_only_cookies:  # Updated variable name
             challenge_res.headers = {}  # todo: fix, selenium not provides this info
             challenge_res.response = driver.page_source
 

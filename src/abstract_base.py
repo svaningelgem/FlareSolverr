@@ -1,15 +1,22 @@
+import platform
 from abc import ABC, abstractmethod
+from collections.abc import Coroutine
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Optional, Tuple, List, TypeVar, Generic, Dict, Union, Coroutine
+from typing import Any, Generic, Optional, TypeVar, Union
 
-from dtos import V1RequestBase, V1ResponseBase, ChallengeResolutionT, HealthResponse, IndexResponse
+from dtos import ChallengeResolutionT, HealthResponse, IndexResponse, V1RequestBase, V1ResponseBase
 
-DriverT = TypeVar('DriverT')  # Type variable for driver implementations
+# Global variables
+IS_ARMARCH = platform.machine().startswith(("arm", "aarch"))
+
+DriverT = TypeVar("DriverT")  # Type variable for driver implementations
+
 
 @dataclass
 class BaseSession(Generic[DriverT]):
     """Base class for browser sessions"""
+
     session_id: str
     driver: DriverT
     created_at: datetime
@@ -17,21 +24,23 @@ class BaseSession(Generic[DriverT]):
     def lifetime(self) -> timedelta:
         return datetime.now() - self.created_at
 
+
 class BaseSessionsStorage(ABC, Generic[DriverT]):
     """Abstract base class for session management"""
 
     def __init__(self):
-        self.sessions: Dict[str, BaseSession[DriverT]] = {}
+        self.sessions: dict[str, BaseSession[DriverT]] = {}
 
     def exists(self, session_id: str) -> bool:
         return session_id in self.sessions
 
-    def session_ids(self) -> List[str]:
+    def session_ids(self) -> list[str]:
         return list(self.sessions.keys())
 
     @abstractmethod
-    def create(self, session_id: Optional[str] = None, proxy: Optional[dict] = None,
-               force_new: Optional[bool] = False) -> Tuple[BaseSession[DriverT], bool]:
+    def create(
+        self, session_id: Optional[str] = None, proxy: Optional[dict] = None, force_new: Optional[bool] = False
+    ) -> tuple[BaseSession[DriverT], bool]:
         """Create a new session or return existing one"""
         pass
 
@@ -41,9 +50,10 @@ class BaseSessionsStorage(ABC, Generic[DriverT]):
         pass
 
     @abstractmethod
-    def get(self, session_id: str, ttl: Optional[timedelta] = None) -> Tuple[BaseSession[DriverT], bool]:
+    def get(self, session_id: str, ttl: Optional[timedelta] = None) -> tuple[BaseSession[DriverT], bool]:
         """Get a session, creating it if needed or expired"""
         pass
+
 
 class BaseService(ABC, Generic[DriverT]):
     """Abstract base class for FlareSolver service implementations"""
@@ -104,6 +114,8 @@ class BaseService(ABC, Generic[DriverT]):
         pass
 
     @abstractmethod
-    def _resolve_challenge(self, req: V1RequestBase, method: str) -> Union[ChallengeResolutionT, Coroutine[Any, Any, ChallengeResolutionT]]:
+    def _resolve_challenge(
+        self, req: V1RequestBase, method: str
+    ) -> Union[ChallengeResolutionT, Coroutine[Any, Any, ChallengeResolutionT]]:
         """Resolve CloudFlare challenge"""
         pass

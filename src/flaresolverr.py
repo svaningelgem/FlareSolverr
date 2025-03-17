@@ -3,17 +3,17 @@ import json
 import logging
 import os
 import sys
-import inspect
 
 import certifi
-from bottle import run, response, Bottle, request, ServerAdapter
+from bottle import Bottle, ServerAdapter, request, response, run
 
+import utils
+from bottle_plugins import prometheus_plugin
 from bottle_plugins.error_plugin import error_plugin
 from bottle_plugins.logger_plugin import logger_plugin
-from bottle_plugins import prometheus_plugin
 from dtos import V1RequestBase
-import utils
 from service_factory import create_service, is_async_method
+
 
 class JSONErrorBottle(Bottle):
     """
@@ -22,7 +22,7 @@ class JSONErrorBottle(Bottle):
 
     def default_error_handler(self, res):
         response.content_type = "application/json"
-        return json.dumps(dict(error=res.body, status_code=res.status_code))
+        return json.dumps({"error": res.body, "status_code": res.status_code})
 
 
 app = JSONErrorBottle()
@@ -30,12 +30,13 @@ app = JSONErrorBottle()
 # Create the appropriate service implementation
 service = create_service()
 
+
 @app.route("/")
 def index():
     """
     Show welcome message
     """
-    if is_async_method(service, 'index_endpoint'):
+    if is_async_method(service, "index_endpoint"):
         res = asyncio.run(service.index_endpoint())
     else:
         res = service.index_endpoint()
@@ -48,7 +49,7 @@ def health():
     Healthcheck endpoint.
     This endpoint is special because it doesn't print traces
     """
-    if is_async_method(service, 'health_endpoint'):
+    if is_async_method(service, "health_endpoint"):
         res = asyncio.run(service.health_endpoint())
     else:
         res = service.health_endpoint()
@@ -62,7 +63,7 @@ def controller_v1():
     """
     req = V1RequestBase(request.json)
 
-    if is_async_method(service, 'controller_v1_endpoint'):
+    if is_async_method(service, "controller_v1_endpoint"):
         res = asyncio.run(service.controller_v1_endpoint(req))
     else:
         res = service.controller_v1_endpoint(req)
@@ -74,10 +75,6 @@ def controller_v1():
 
 if __name__ == "__main__":
     # check python version
-    if sys.version_info < (3, 9):
-        raise Exception(
-            "The Python version is less than 3.9, a version equal to or higher is required."
-        )
 
     # fix for HEADLESS=false in Windows binary
     # https://stackoverflow.com/a/27694505
@@ -112,9 +109,7 @@ if __name__ == "__main__":
     )
     # disable warning traces from urllib3
     logging.getLogger("urllib3").setLevel(logging.ERROR)
-    logging.getLogger("selenium.webdriver.remote.remote_connection").setLevel(
-        logging.WARNING
-    )
+    logging.getLogger("selenium.webdriver.remote.remote_connection").setLevel(logging.WARNING)
     logging.getLogger("undetected_chromedriver").setLevel(logging.WARNING)
     # nodriver is very verbose in debug
     logging.getLogger("nd.core.element").disabled = True
@@ -124,19 +119,15 @@ if __name__ == "__main__":
 
     logging.info(f"FlareSolverr {utils.get_flaresolverr_version()}")
     logging.debug("Debug log enabled")
-    logging.info(
-        "WARNING: YOU ARE RUNNING AN UNOFFICIAL EXPERIMENTAL BRANCH OF FLARESOLVER WHICH MAY CONTAIN BUGS."
-    )
-    logging.info(
-        "WARNING: IF YOU ENCOUNTER ANY, PLEASE REPORT THEM ON GITHUB AT THE FOLLOWING LINK:"
-    )
+    logging.info("WARNING: YOU ARE RUNNING AN UNOFFICIAL EXPERIMENTAL BRANCH OF FLARESOLVER WHICH MAY CONTAIN BUGS.")
+    logging.info("WARNING: IF YOU ENCOUNTER ANY, PLEASE REPORT THEM ON GITHUB AT THE FOLLOWING LINK:")
     logging.info("WARNING: https://github.com/FlareSolverr/FlareSolverr/pull/1163")
 
     # Get current OS for global variable
     utils.get_current_platform()
 
     # test browser installation based on driver selection
-    if is_async_method(service, 'test_browser_installation'):
+    if is_async_method(service, "test_browser_installation"):
         asyncio.run(service.test_browser_installation())
     else:
         service.test_browser_installation()

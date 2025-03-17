@@ -4,23 +4,23 @@ import platform
 import sys
 import time
 from datetime import datetime, timedelta
-from typing import Optional, Tuple, cast
+from typing import Optional, cast
 from urllib.parse import unquote, urlparse
 from uuid import uuid1
-
-from nodriver import Browser, Tab
 
 import utils
 from abstract_base import BaseService, BaseSession, BaseSessionsStorage
 from dtos import (
-    STATUS_OK,
     STATUS_ERROR,
+    STATUS_OK,
+    ChallengeResolutionResultT,
+    ChallengeResolutionT,
+    HealthResponse,
+    IndexResponse,
     V1RequestBase,
     V1ResponseBase,
-    ChallengeResolutionT,
-    IndexResponse,
-    HealthResponse, ChallengeResolutionResultT
 )
+from nodriver import Browser, Tab
 
 # Constants from flaresolverr_service_nd.py
 ACCESS_DENIED_TITLES = [
@@ -61,15 +61,19 @@ CHALLENGE_SELECTORS = [
 STATUS_CODE = 200  # Always return 200 until I can catch the proper return code
 SHORT_TIMEOUT = 2
 
+
 class AsyncSession(BaseSession[Browser]):
     """Nodriver Browser session"""
+
     pass
+
 
 class AsyncSessionsStorage(BaseSessionsStorage[Browser]):
     """Asynchronous session storage implementation"""
 
-    async def create(self, session_id: Optional[str] = None, proxy: Optional[dict] = None,
-                     force_new: Optional[bool] = False) -> Tuple[AsyncSession, bool]:
+    async def create(
+        self, session_id: Optional[str] = None, proxy: Optional[dict] = None, force_new: Optional[bool] = False
+    ) -> tuple[AsyncSession, bool]:
         session_id = session_id or str(uuid1())
 
         if force_new:
@@ -77,7 +81,7 @@ class AsyncSessionsStorage(BaseSessionsStorage[Browser]):
 
         if self.exists(session_id):
             # Need to cast the session to the correct type
-            return cast(Tuple[AsyncSession, bool], (self.sessions[session_id], False))
+            return cast(tuple[AsyncSession, bool], (self.sessions[session_id], False))
 
         driver = await utils.get_webdriver_nd(proxy)
         session = AsyncSession(session_id, driver, datetime.now())
@@ -93,14 +97,15 @@ class AsyncSessionsStorage(BaseSessionsStorage[Browser]):
         await utils.after_run_cleanup(driver=session.driver)
         return True
 
-    async def get(self, session_id: str, ttl: Optional[timedelta] = None) -> Tuple[AsyncSession, bool]:
+    async def get(self, session_id: str, ttl: Optional[timedelta] = None) -> tuple[AsyncSession, bool]:
         session, fresh = await self.create(session_id)
 
         if ttl is not None and not fresh and session.lifetime() > ttl:
-            logging.debug(f'Session lifetime expired, recreating (session_id={session_id})')
+            logging.debug(f"Session lifetime expired, recreating (session_id={session_id})")
             session, fresh = await self.create(session_id, force_new=True)
 
         return session, fresh
+
 
 class AsyncService(BaseService[Browser]):
     """Asynchronous service implementation"""
@@ -130,11 +135,7 @@ class AsyncService(BaseService[Browser]):
                 await tab.browser.update_targets()
                 # get the iframe target
                 cf_tab = next(
-                    (
-                        target
-                        for target in tab.browser.targets
-                        if "challenges.cloudflare.com" in target.url
-                    ),
+                    (target for target in tab.browser.targets if "challenges.cloudflare.com" in target.url),
                     None,
                 )
                 if cf_tab is None:
@@ -158,7 +159,7 @@ class AsyncService(BaseService[Browser]):
     async def _post_request_nd(self, req: V1RequestBase) -> str:
         """Create HTML content for POST request submission"""
         post_form = f'<form id="hackForm" action="{req.url}" method="POST">'
-        query_string = req.postData if req.postData[0] != "?" else req.postData[1:]
+        query_string = req.post_data if req.post_data[0] != "?" else req.post_data[1:]  # Updated variable name
         pairs = query_string.split("&")
         for pair in pairs:
             parts = pair.split("=")
@@ -273,15 +274,11 @@ class AsyncService(BaseService[Browser]):
     async def _cmd_request_get(self, req: V1RequestBase) -> V1ResponseBase:
         # do some validations
         if req.url is None:
-            raise Exception(
-                "Request parameter 'url' is mandatory in 'request.get' command."
-            )
+            raise Exception("Request parameter 'url' is mandatory in 'request.get' command.")
         if req.postData is not None:
             raise Exception("Cannot use 'postBody' when sending a GET request.")
         if req.returnRawHtml is not None:
-            logging.warning(
-                "Request parameter 'returnRawHtml' was removed in FlareSolverr v2."
-            )
+            logging.warning("Request parameter 'returnRawHtml' was removed in FlareSolverr v2.")
         if req.download is not None:
             logging.warning("Request parameter 'download' was removed in FlareSolverr v2.")
 
@@ -295,13 +292,9 @@ class AsyncService(BaseService[Browser]):
     async def _cmd_request_post(self, req: V1RequestBase) -> V1ResponseBase:
         # do some validations
         if req.postData is None:
-            raise Exception(
-                "Request parameter 'postData' is mandatory in 'request.post' command."
-            )
+            raise Exception("Request parameter 'postData' is mandatory in 'request.post' command.")
         if req.returnRawHtml is not None:
-            logging.warning(
-                "Request parameter 'returnRawHtml' was removed in FlareSolverr v2."
-            )
+            logging.warning("Request parameter 'returnRawHtml' was removed in FlareSolverr v2.")
         if req.download is not None:
             logging.warning("Request parameter 'download' was removed in FlareSolverr v2.")
 
@@ -315,9 +308,7 @@ class AsyncService(BaseService[Browser]):
     async def _cmd_sessions_create(self, req: V1RequestBase) -> V1ResponseBase:
         logging.debug("Creating new session...")
 
-        session, fresh = await self.sessions_storage.create(
-            session_id=req.session, proxy=req.proxy
-        )
+        session, fresh = await self.sessions_storage.create(session_id=req.session, proxy=req.proxy)
         session_id = session.session_id
 
         if not fresh:
@@ -349,9 +340,7 @@ class AsyncService(BaseService[Browser]):
         if not existed:
             raise Exception("The session doesn't exist.")
 
-        return V1ResponseBase(
-            {"status": STATUS_OK, "message": "The session has been removed."}
-        )
+        return V1ResponseBase({"status": STATUS_OK, "message": "The session has been removed."})
 
     async def _resolve_challenge(self, req: V1RequestBase, method: str) -> ChallengeResolutionT:
         timeout = req.maxTimeout / 1000
@@ -359,17 +348,11 @@ class AsyncService(BaseService[Browser]):
         try:
             if req.session:
                 session_id = req.session
-                ttl = (
-                    timedelta(minutes=req.session_ttl_minutes)
-                    if req.session_ttl_minutes
-                    else None
-                )
+                ttl = timedelta(minutes=req.session_ttl_minutes) if req.session_ttl_minutes else None
                 session, fresh = await self.sessions_storage.get(session_id, ttl)
 
                 if fresh:
-                    logging.debug(
-                        f"new session created to perform the request (session_id={session_id})"
-                    )
+                    logging.debug(f"new session created to perform the request (session_id={session_id})")
                 else:
                     logging.debug(
                         f"existing session is used to perform the request (session_id={session_id}, "
@@ -379,18 +362,12 @@ class AsyncService(BaseService[Browser]):
                 driver = session.driver
             else:
                 driver = await utils.get_webdriver_nd(req.proxy)
-                logging.debug(
-                    "New instance of chromium has been created to perform the request"
-                )
-            return await asyncio.wait_for(
-                self._evil_logic(req, driver, method), timeout=timeout
-            )
-        except asyncio.TimeoutError:
-            raise Exception(
-                f"Error solving the challenge. Timeout after {timeout} seconds."
-            )
+                logging.debug("New instance of chromium has been created to perform the request")
+            return await asyncio.wait_for(self._evil_logic(req, driver, method), timeout=timeout)
+        except asyncio.TimeoutError as e:
+            raise Exception(f"Error solving the challenge. Timeout after {timeout} seconds.") from e
         except Exception as e:
-            raise Exception("Error solving the challenge. " + str(e).replace("\n", "\\n"))
+            raise Exception("Error solving the challenge. " + str(e).replace("\n", "\\n")) from e
         finally:
             if not req.session and driver is not None:
                 await utils.after_run_cleanup(driver=driver)
@@ -414,7 +391,7 @@ class AsyncService(BaseService[Browser]):
         if req.cookies is not None and len(req.cookies) > 0:
             await tab.wait(1)
             await tab
-            logging.debug(f"Setting cookies...")
+            logging.debug("Setting cookies...")
 
             # Get cleaned domain
             domain = (urlparse(req.url).netloc).split(".")
@@ -429,9 +406,7 @@ class AsyncService(BaseService[Browser]):
                 if domain not in cookie["domain"]:
                     logging.debug(f"Skipping cookie from domain {cookie['domain']}")
                     continue
-                logging.debug(
-                    f"Appending cookie '{cookie['name']}' for '{cookie['domain']}'..."
-                )
+                logging.debug(f"Appending cookie '{cookie['name']}' for '{cookie['domain']}'...")
                 cookies.append(
                     utils.nd.cdp.network.CookieParam(
                         name=cookie["name"],
@@ -502,7 +477,9 @@ class AsyncService(BaseService[Browser]):
 
                     # wait until the title changes
                     for title in CHALLENGE_TITLES:
-                        logging.debug(f"Waiting for title (attempt {attempt}): {title} [Current title: {tab.target.title}]")
+                        logging.debug(
+                            f"Waiting for title (attempt {attempt}): {title} [Current title: {tab.target.title}]"
+                        )
                         if tab.target.title != title:
                             logging.debug(" * nope")
                             continue
@@ -525,16 +502,11 @@ class AsyncService(BaseService[Browser]):
                         logging.debug("Waiting for tab")
                         await tab
                         logging.debug(f"Waiting for selector (attempt {attempt}): {selector}")
-                        if (
-                                await tab.query_selector(selector=selector, _node=doc)
-                                is not None
-                        ):
+                        if await tab.query_selector(selector=selector, _node=doc) is not None:
                             logging.debug(" * found selector")
                             start_time = time.time()
                             while True:
-                                element = await tab.query_selector(
-                                    selector=selector, _node=doc
-                                )
+                                element = await tab.query_selector(selector=selector, _node=doc)
                                 logging.debug(" * finised querying (again)")
                                 if not element:
                                     logging.debug(" * ok next")
@@ -577,9 +549,9 @@ class AsyncService(BaseService[Browser]):
         logging.debug("requesting cookies from the driver")
         challenge_res.cookies = await driver.cookies.get_all(requests_cookie_format=True)
         logging.debug("requesting user agent from the driver")
-        challenge_res.userAgent = await utils.get_user_agent_nd(driver)
+        challenge_res.user_agent = await utils.get_user_agent_nd(driver)  # Updated variable name
 
-        if not req.returnOnlyCookies:
+        if not req.return_only_cookies:  # Updated variable name
             challenge_res.headers = {}  # nodriver should support this in the future
             logging.debug("requesting html content from the tab")
             challenge_res.response = await tab.get_content(_node=doc)
