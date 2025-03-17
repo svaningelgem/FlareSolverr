@@ -1,11 +1,12 @@
 import json
-import logging
 import os
 import pprint
 import sys
+import time
 
 import certifi
 from bottle import Bottle, ServerAdapter, request, response, run
+from loguru import logger
 
 import utils
 from bottle_plugins.error_plugin import error_plugin
@@ -13,6 +14,22 @@ from bottle_plugins.logger_plugin import logger_plugin
 from dtos import V1RequestBase
 from method_utils import call_method
 from service_factory import create_service
+
+
+# Configure loguru
+def setup_logging() -> None:
+    """Configure loguru logger"""
+
+    # Remove the default handler
+    logger.remove()
+
+    # Add console logger with the format
+    logger.add(
+        sys.stdout,
+        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
+        level=os.environ.get("LOG_LEVEL", "DEBUG").upper(),
+        colorize=True,
+    )
 
 
 class JSONErrorBottle(Bottle):
@@ -36,10 +53,10 @@ def index():
     """
     Show welcome message
     """
-    logging.info("Handling request to /")
+    logger.info("Handling request to /")
     res = call_method(service, "index_endpoint")
     result = utils.object_to_dict(res)
-    logging.debug(f"Index response: {pprint.pformat(result)}")
+    logger.debug(f"Index response: {pprint.pformat(result)}")
     return result
 
 
@@ -48,7 +65,7 @@ def health():
     """
     Healthcheck endpoint
     """
-    logging.debug("Handling request to /health")
+    logger.debug("Handling request to /health")
     res = call_method(service, "health_endpoint")
     return utils.object_to_dict(res)
 
@@ -59,12 +76,16 @@ def controller_v1():
     Controller v1
     """
     # Deep log request details
-    logging.info("Handling POST request to /v1")
+    start_time = time.time()
+    request_id = f"req-{int(start_time * 1000) % 10000:04d}"
+    logger.configure(extra={"request_id": request_id})
+
+    logger.info("Handling POST request to /v1")
     request_body = request.json if request.json else {}
     request_headers = dict(request.headers.items())
 
-    logging.debug(f"Request headers: {pprint.pformat(request_headers)}")
-    logging.debug(f"Request body: {pprint.pformat(request_body)}")
+    logger.debug(f"Request headers: {pprint.pformat(request_headers)}")
+    logger.debug(f"Request body: {pprint.pformat(request_body)}")
 
     req = V1RequestBase(request_body)
 
@@ -75,11 +96,14 @@ def controller_v1():
         response.status = 500
 
     result = utils.object_to_dict(res)
-    logging.debug(f"Response body: {pprint.pformat(result)}")
+    logger.debug(f"Response body: {pprint.pformat(result)}")
 
-    # Log response headers
+    # Log response headers and timing
     response_headers = dict(response.headers.items())
-    logging.debug(f"Response headers: {pprint.pformat(response_headers)}")
+    logger.debug(f"Response headers: {pprint.pformat(response_headers)}")
+
+    duration_ms = (time.time() - start_time) * 1000
+    logger.info(f"Request completed in {duration_ms:.2f}ms")
 
     return result
 
@@ -101,49 +125,30 @@ if __name__ == "__main__":
     os.environ["SSL_CERT_FILE"] = certifi.where()
 
     # Validate configuration
-    log_level = os.environ.get("LOG_LEVEL", "DEBUG").upper()
     server_host = os.environ.get("HOST", "0.0.0.0")
     server_port = int(os.environ.get("PORT", 8191))
 
     # Configure logger
-    logger_format = "%(asctime)s %(levelname)-8s %(message)s"
-    if log_level == "DEBUG":
-        logger_format = "%(asctime)s %(levelname)-8s ReqId %(thread)s %(message)s"
-    logging.basicConfig(
-        format=logger_format,
-        level=log_level,
-        datefmt="%Y-%m-%d %H:%M:%S",
-        handlers=[logging.StreamHandler(sys.stdout)],
-    )
+    setup_logging()
 
-    # Disable warning traces from various libraries
-    logging.getLogger("urllib3").setLevel(logging.ERROR)
-    logging.getLogger("selenium.webdriver.remote.remote_connection").setLevel(logging.WARNING)
-    logging.getLogger("undetected_chromedriver").setLevel(logging.WARNING)
-    # Nodriver is very verbose in debug
-    logging.getLogger("nd.core.element").disabled = True
-    logging.getLogger("nodriver.core.browser").disabled = True
-    logging.getLogger("nodriver.core.tab").disabled = True
-    logging.getLogger("websockets.client").disabled = True
+    # Disable warning traces from various libraries by not intercepting their logs
+    # Instead, we'll just let loguru handle the logs directly
 
     # Log startup information
-    logging.info(f"FlareSolverr {utils.get_flaresolverr_version()} starting up")
-    logging.info(f"Server listening on http://{server_host}:{server_port}")
-    if log_level == "DEBUG":
-        logging.debug("Debug logging enabled")
+    logger.info(f"FlareSolverr {utils.get_flaresolverr_version()} starting up")
+    logger.info(f"Server listening on http://{server_host}:{server_port}")
+    logger.debug("Debug logging enabled")
 
     # Driver type information
     driver_type = utils.get_driver_selection()
-    logging.info(f"Using driver: {driver_type}")
+    logger.info(f"Using driver: {driver_type}")
 
-    logging.info("WARNING: YOU ARE RUNNING AN UNOFFICIAL EXPERIMENTAL BRANCH OF FLARESOLVER WHICH MAY CONTAIN BUGS.")
-    logging.info("WARNING: IF YOU ENCOUNTER ANY, PLEASE REPORT THEM ON GITHUB AT THE FOLLOWING LINK:")
-    logging.info("WARNING: https://github.com/FlareSolverr/FlareSolverr/pull/1163")
+    logger.warning("YOU ARE RUNNING AN UNOFFICIAL EXPERIMENTAL BRANCH OF FLARESOLVER WHICH MAY CONTAIN BUGS.")
 
     # Test browser installation based on driver selection
-    logging.info("Testing browser installation...")
+    logger.info("Testing browser installation...")
     call_method(service, "test_browser_installation")
-    logging.info("Browser installation test passed")
+    logger.info("Browser installation test passed")
 
     # Install bottle plugins (error handling and logging)
     app.install(logger_plugin)
@@ -157,9 +162,9 @@ if __name__ == "__main__":
         def run(self, handler):
             from waitress import serve
 
-            logging.info(f"Starting waitress server on {self.host}:{self.port}")
+            logger.info(f"Starting waitress server on {self.host}:{self.port}")
             serve(handler, host=self.host, port=self.port, asyncore_use_poll=True)
-            logging.info("Server stopped")
+            logger.info("Server stopped")
 
-    logging.info("Starting server...")
+    logger.info("Starting server...")
     run(app, host=server_host, port=server_port, quiet=True, server=WaitressServerPoll)

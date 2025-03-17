@@ -1,7 +1,8 @@
 import asyncio
 import inspect
-import logging
 from typing import Any, TypeVar
+
+from loguru import logger
 
 T = TypeVar("T")
 
@@ -25,8 +26,8 @@ def call_method(obj: Any, method_name: str, *args, **kwargs) -> Any:
     method = getattr(obj, method_name)
 
     if inspect.iscoroutinefunction(method):
-        logging.debug(f"Calling async method: {method_name}")
+        logger.debug(f"Calling async method: {method_name}")
         return asyncio.run(method(*args, **kwargs))
     else:
-        logging.debug(f"Calling sync method: {method_name}")
+        logger.debug(f"Calling sync method: {method_name}")
         return method(*args, **kwargs)

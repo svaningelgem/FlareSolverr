@@ -1,5 +1,5 @@
 from bottle import response
-import logging
+from loguru import logger
 import json
 import traceback
 
@@ -22,8 +22,8 @@ def error_plugin(callback):
             trace = traceback.format_exc()
 
             # Log error with trace
-            logging.error(f"Error in route handler: {str(e)}")
-            logging.debug(f"Traceback: {trace}")
+            logger.error(f"Error in route handler: {str(e)}")
+            logger.debug(f"Traceback: {trace}")
 
             # Return error as JSON
             response.status = 500

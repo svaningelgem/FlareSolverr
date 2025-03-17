@@ -1,6 +1,6 @@
-import inspect
-import logging
-from typing import Any, TypeVar
+from typing import TypeVar
+
+from loguru import logger
 
 import utils
 from abstract_base import BaseService
@@ -15,17 +15,10 @@ def create_service() -> BaseService:
     if driver_selection == "nodriver":
         from async_implementation import AsyncService
 
-        logging.debug("Creating AsyncService (nodriver)")
+        logger.debug("Creating AsyncService (nodriver)")
         return AsyncService()
     else:
         from sync_implementation import SyncService
 
-        logging.debug("Creating SyncService (standard)")
+        logger.debug("Creating SyncService (standard)")
         return SyncService()
-
-
-def is_async_method(obj: Any, method_name: str) -> bool:
-    """Check if a method is async"""
-    if not hasattr(obj, method_name):
-        return False
-    return inspect.iscoroutinefunction(getattr(obj, method_name))

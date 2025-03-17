@@ -1,6 +1,5 @@
 import asyncio
 import json
-import logging
 import os
 import platform as plt
 import pprint
@@ -14,6 +13,7 @@ from typing import Optional
 
 import psutil
 from bs4 import BeautifulSoup
+from loguru import logger
 from selenium.webdriver.chrome.webdriver import WebDriver
 
 import nodriver as nd
@@ -93,7 +93,7 @@ def get_cloudflare_extension_dir() -> str:
     """
 
     extension_dir = tempfile.mkdtemp()
-    logging.debug(f"Created CloudFlare extension directory: {extension_dir}")
+    logger.debug(f"Created CloudFlare extension directory: {extension_dir}")
 
     with open(os.path.join(extension_dir, "manifest.json"), "w") as f:
         f.write(manifest_json)
@@ -113,7 +113,7 @@ def create_proxy_extension(proxy: dict) -> str:
     username = proxy["username"]
     password = proxy["password"]
 
-    logging.debug(f"Creating proxy extension for {scheme}://{host}:{port}")
+    logger.debug(f"Creating proxy extension for {scheme}://{host}:{port}")
 
     manifest_json = """
     {
@@ -166,7 +166,7 @@ def create_proxy_extension(proxy: dict) -> str:
     """
 
     proxy_extension_dir = tempfile.mkdtemp()
-    logging.debug(f"Created proxy extension directory: {proxy_extension_dir}")
+    logger.debug(f"Created proxy extension directory: {proxy_extension_dir}")
 
     with open(os.path.join(proxy_extension_dir, "manifest.json"), "w") as f:
         f.write(manifest_json)
@@ -181,14 +181,14 @@ def create_proxy_extension(proxy: dict) -> str:
 def get_chrome_exe_path() -> str:
     """Get the Chrome/Chromium executable path"""
     # Check different possible locations
-    logging.debug("Searching for Chrome executable...")
+    logger.debug("Searching for Chrome executable...")
 
     # Linux pyinstaller bundle
     chrome_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chrome", "chrome")
     if os.path.exists(chrome_path):
-        logging.debug(f"Found Chrome at bundle path: {chrome_path}")
+        logger.debug(f"Found Chrome at bundle path: {chrome_path}")
         if not os.access(chrome_path, os.X_OK):
-            logging.error(f"Chrome binary '{chrome_path}' is not executable")
+            logger.error(f"Chrome binary '{chrome_path}' is not executable")
             raise Exception(
                 f'Chrome binary "{chrome_path}" is not executable. '
                 f'Please, extract the archive with "tar xzf <file.tar.gz>".'
@@ -198,53 +198,53 @@ def get_chrome_exe_path() -> str:
     # Windows pyinstaller bundle
     chrome_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chrome", "chrome.exe")
     if os.path.exists(chrome_path):
-        logging.debug(f"Found Chrome at Windows bundle path: {chrome_path}")
+        logger.debug(f"Found Chrome at Windows bundle path: {chrome_path}")
         return chrome_path
 
     # System installation
     try:
         path = uc.find_chrome_executable()
-        logging.debug(f"Found system Chrome at: {path}")
+        logger.debug(f"Found system Chrome at: {path}")
         return path
     except Exception as e:
-        logging.error(f"Failed to find Chrome executable: {e}")
+        logger.error(f"Failed to find Chrome executable: {e}")
         raise
 
 
 @lru_cache(1)
 def get_chrome_major_version() -> str:
     """Get Chrome/Chromium major version"""
-    logging.debug("Detecting Chrome version...")
+    logger.debug("Detecting Chrome version...")
 
     if os.name == "nt":
         # Windows version detection
         try:
             complete_version = extract_version_nt_executable(get_chrome_exe_path())
-            logging.debug(f"Detected Chrome version from executable: {complete_version}")
+            logger.debug(f"Detected Chrome version from executable: {complete_version}")
         except Exception as e:
-            logging.debug(f"Failed to get version from executable: {e}")
+            logger.debug(f"Failed to get version from executable: {e}")
             try:
                 complete_version = extract_version_nt_registry()
-                logging.debug(f"Detected Chrome version from registry: {complete_version}")
+                logger.debug(f"Detected Chrome version from registry: {complete_version}")
             except Exception as e:
-                logging.debug(f"Failed to get version from registry: {e}")
+                logger.debug(f"Failed to get version from registry: {e}")
                 complete_version = extract_version_nt_folder()
-                logging.debug(f"Detected Chrome version from folder: {complete_version}")
+                logger.debug(f"Detected Chrome version from folder: {complete_version}")
     else:
         # Linux/macOS version detection
         chrome_path = get_chrome_exe_path()
-        logging.debug(f"Running '{chrome_path} --version' to detect version")
+        logger.debug(f"Running '{chrome_path} --version' to detect version")
         process = os.popen(f'"{chrome_path}" --version')
         complete_version = process.read()
         process.close()
-        logging.debug(f"Chrome version output: {complete_version}")
+        logger.debug(f"Chrome version output: {complete_version}")
 
     try:
         major_version = complete_version.split(".")[0].split(" ")[-1]
-        logging.info(f"Detected Chrome major version: {major_version}")
+        logger.info(f"Detected Chrome major version: {major_version}")
         return major_version
     except Exception as e:
-        logging.error(f"Failed to parse Chrome version: {e}")
+        logger.error(f"Failed to parse Chrome version: {e}")
         return ""
 
 
@@ -299,7 +299,7 @@ def _set_user_agent_cached(user_agent: str) -> None:
     global _user_agent_cache
     # Fix for Chrome 117 | https://github.com/FlareSolverr/FlareSolverr/issues/910
     _user_agent_cache = re.sub("HEADLESS", "", user_agent, flags=re.IGNORECASE)
-    logging.info(f"Stored User-Agent: {_user_agent_cache}")
+    logger.info(f"Stored User-Agent: {_user_agent_cache}")
 
 
 async def get_user_agent_nd(driver=None) -> str:
@@ -311,7 +311,7 @@ async def get_user_agent_nd(driver=None) -> str:
     temp_driver = None
     try:
         if driver is None:
-            logging.info("Creating temporary browser to get User-Agent...")
+            logger.info("Creating temporary browser to get User-Agent...")
             temp_driver = await get_webdriver_nd()
             driver = temp_driver
 
@@ -319,12 +319,12 @@ async def get_user_agent_nd(driver=None) -> str:
         _set_user_agent_cached(user_agent)
         return _get_user_agent_cached()
     except Exception as e:
-        logging.error(f"Error getting browser User-Agent: {e}")
+        logger.error(f"Error getting browser User-Agent: {e}")
         raise Exception(f"Error getting browser User-Agent: {e}") from e
     finally:
         if temp_driver is not None:
             await after_run_cleanup(driver=temp_driver)
-            logging.debug("Cleaned up temporary browser")
+            logger.debug("Cleaned up temporary browser")
 
 
 def get_user_agent_uc(driver=None) -> str:
@@ -336,7 +336,7 @@ def get_user_agent_uc(driver=None) -> str:
     temp_driver = None
     try:
         if driver is None:
-            logging.info("Creating temporary browser to get User-Agent...")
+            logger.info("Creating temporary browser to get User-Agent...")
             temp_driver = get_webdriver_uc()
             driver = temp_driver
 
@@ -344,14 +344,14 @@ def get_user_agent_uc(driver=None) -> str:
         _set_user_agent_cached(user_agent)
         return _get_user_agent_cached()
     except Exception as e:
-        logging.error(f"Error getting browser User-Agent: {e}")
+        logger.error(f"Error getting browser User-Agent: {e}")
         raise Exception(f"Error getting browser User-Agent: {e}") from e
     finally:
         if temp_driver is not None:
             if os.name == "nt":
                 temp_driver.close()
             temp_driver.quit()
-            logging.debug("Cleaned up temporary browser")
+            logger.debug("Cleaned up temporary browser")
 
 
 # Patched driver path cache
@@ -368,7 +368,7 @@ def set_patched_driver_path(path: str) -> None:
     """Cache patched driver path"""
     global _patched_driver_path
     _patched_driver_path = path
-    logging.debug(f"Stored patched driver path: {_patched_driver_path}")
+    logger.debug(f"Stored patched driver path: {_patched_driver_path}")
 
 
 # Xvfb display instance cache
@@ -383,12 +383,12 @@ def start_xvfb_display():
 
         _xvfb_display = Xvfb()
         _xvfb_display.start()
-        logging.debug("VIRTUAL SCREEN STARTED")
+        logger.debug("VIRTUAL SCREEN STARTED")
 
 
 async def get_webdriver_nd(proxy: dict = None) -> nd.Browser:
     """Get a nodriver browser instance"""
-    logging.info("Launching web browser with nodriver...")
+    logger.info("Launching web browser with nodriver...")
 
     options = nd.Config()
     options.sandbox = False
@@ -401,58 +401,58 @@ async def get_webdriver_nd(proxy: dict = None) -> nd.Browser:
     cached_ua = _get_user_agent_cached()
     if cached_ua:
         options.add_argument(f"--user-agent={cached_ua}")
-        logging.debug(f"Using cached user agent: {cached_ua}")
+        logger.debug(f"Using cached user agent: {cached_ua}")
 
     proxy_extension_dir = None
     if proxy and all(key in proxy for key in ["url", "username", "password"]):
         proxy_extension_dir = create_proxy_extension(proxy)
         options.add_extension(os.path.abspath(proxy_extension_dir))
-        logging.info(f"Using proxy extension for {proxy['url']}")
+        logger.info(f"Using proxy extension for {proxy['url']}")
     elif proxy and "url" in proxy:
         proxy_url = proxy["url"]
-        logging.info(f"Using proxy: {proxy_url}")
+        logger.info(f"Using proxy: {proxy_url}")
         options.add_argument(f"--proxy-server={proxy_url}")
 
     # Add cloudflare extension
     # https://github.com/TheFalloutOf76/CDP-bug-MouseEvent-.screenX-.screenY-patcher
     cloudflare_extension_dir = get_cloudflare_extension_dir()
     options.add_extension(os.path.abspath(cloudflare_extension_dir))
-    logging.debug("Added CloudFlare extension")
+    logger.debug("Added CloudFlare extension")
 
     # Handle headless mode
     if get_config_headless():
         if os.name == "nt":
             options.windows_headless = True
-            logging.debug("Using Windows headless mode")
+            logger.debug("Using Windows headless mode")
         else:
             start_xvfb_display()
-            logging.debug("Using Xvfb for headless mode")
+            logger.debug("Using Xvfb for headless mode")
 
     # Add browser binary path for Windows
     if os.name == "nt":
         options.browser_executable_path = get_chrome_exe_path()
-        logging.debug(f"Using Chrome executable: {options.browser_executable_path}")
+        logger.debug(f"Using Chrome executable: {options.browser_executable_path}")
 
-    logging.debug("Browser options: " + pprint.pformat(options.__dict__))
+    logger.debug(f"Browser options: {pprint.pformat(options.__dict__)}")
 
     try:
         driver = await nd.Browser.create(config=options)
-        logging.info("Browser created successfully")
+        logger.info("Browser created successfully")
     except Exception as e:
-        logging.error(f"Error creating Chrome Browser: {e}")
+        logger.error(f"Error creating Chrome Browser: {e}")
         raise
 
     # Clean up proxy extension directory
     if proxy_extension_dir is not None:
         shutil.rmtree(proxy_extension_dir)
-        logging.debug(f"Removed proxy extension directory: {proxy_extension_dir}")
+        logger.debug(f"Removed proxy extension directory: {proxy_extension_dir}")
 
     return driver
 
 
 def get_webdriver_uc(proxy: dict = None) -> WebDriver:
     """Get an undetected-chromedriver instance"""
-    logging.info("Launching web browser with undetected-chromedriver...")
+    logger.info("Launching web browser with undetected-chromedriver...")
 
     # undetected_chromedriver options
     options = uc.ChromeOptions()
@@ -466,7 +466,7 @@ def get_webdriver_uc(proxy: dict = None) -> WebDriver:
     if is_arm_arch():
         options.add_argument("--disable-gpu-sandbox")
         options.add_argument("--disable-software-rasterizer")
-        logging.debug("Added ARM architecture options")
+        logger.debug("Added ARM architecture options")
 
     options.add_argument("--ignore-certificate-errors")
     options.add_argument("--ignore-ssl-errors")
@@ -474,22 +474,22 @@ def get_webdriver_uc(proxy: dict = None) -> WebDriver:
 
     language = os.environ.get("LANG", "en")
     options.add_argument(f"--accept-lang={language}")
-    logging.debug(f"Using language: {language}")
+    logger.debug(f"Using language: {language}")
 
     # Add user agent if we have it cached
     cached_ua = _get_user_agent_cached()
     if cached_ua:
         options.add_argument(f"--user-agent={cached_ua}")
-        logging.debug(f"Using cached user agent: {cached_ua}")
+        logger.debug(f"Using cached user agent: {cached_ua}")
 
     proxy_extension_dir = None
     if proxy and all(key in proxy for key in ["url", "username", "password"]):
         proxy_extension_dir = create_proxy_extension(proxy)
         options.add_argument(f"--load-extension={os.path.abspath(proxy_extension_dir)}")
-        logging.info(f"Using proxy extension for {proxy['url']}")
+        logger.info(f"Using proxy extension for {proxy['url']}")
     elif proxy and "url" in proxy:
         proxy_url = proxy["url"]
-        logging.info(f"Using proxy: {proxy_url}")
+        logger.info(f"Using proxy: {proxy_url}")
         options.add_argument(f"--proxy-server={proxy_url}")
 
     # Handle headless mode
@@ -497,10 +497,10 @@ def get_webdriver_uc(proxy: dict = None) -> WebDriver:
     if get_config_headless():
         if os.name == "nt":
             windows_headless = True
-            logging.debug("Using Windows headless mode")
+            logger.debug("Using Windows headless mode")
         else:
             start_xvfb_display()
-            logging.debug("Using Xvfb for headless mode")
+            logger.debug("Using Xvfb for headless mode")
 
     options.add_argument("--auto-open-devtools-for-tabs")
     options.add_argument("--disable-popup-blocking")
@@ -511,21 +511,21 @@ def get_webdriver_uc(proxy: dict = None) -> WebDriver:
     if os.path.exists("/app/chromedriver"):
         # Running inside Docker
         driver_exe_path = "/app/chromedriver"
-        logging.debug("Using Docker chromedriver path")
+        logger.debug("Using Docker chromedriver path")
     else:
         version_main = get_chrome_major_version()
         patched_path = get_patched_driver_path()
         if patched_path:
             driver_exe_path = patched_path
-            logging.debug(f"Using existing patched driver: {driver_exe_path}")
+            logger.debug(f"Using existing patched driver: {driver_exe_path}")
 
     # Detect chrome path
     browser_executable_path = get_chrome_exe_path()
-    logging.debug(f"Using Chrome executable: {browser_executable_path}")
+    logger.debug(f"Using Chrome executable: {browser_executable_path}")
 
     # Log all options
     all_options = list(options.arguments)
-    logging.debug("Chrome options: " + pprint.pformat(all_options))
+    logger.debug(f"Chrome options: {pprint.pformat(all_options)}")
 
     # Downloads and patches the chromedriver
     try:
@@ -537,9 +537,9 @@ def get_webdriver_uc(proxy: dict = None) -> WebDriver:
             windows_headless=windows_headless,
             headless=get_config_headless(),
         )
-        logging.info("Chrome browser created successfully")
+        logger.info("Chrome browser created successfully")
     except Exception as e:
-        logging.error(f"Error starting Chrome: {e}")
+        logger.error(f"Error starting Chrome: {e}")
         raise
 
     # Save the patched driver to avoid re-downloads
@@ -547,13 +547,13 @@ def get_webdriver_uc(proxy: dict = None) -> WebDriver:
         new_path = os.path.join(driver.patcher.data_path, driver.patcher.exe_name)
         if new_path != driver.patcher.executable_path:
             shutil.copy(driver.patcher.executable_path, new_path)
-            logging.debug(f"Saved patched driver to: {new_path}")
+            logger.debug(f"Saved patched driver to: {new_path}")
             set_patched_driver_path(new_path)
 
     # Clean up proxy extension directory
     if proxy_extension_dir is not None:
         shutil.rmtree(proxy_extension_dir)
-        logging.debug(f"Removed proxy extension directory: {proxy_extension_dir}")
+        logger.debug(f"Removed proxy extension directory: {proxy_extension_dir}")
 
     return driver
 
@@ -565,32 +565,32 @@ async def after_run_cleanup(driver: nd.Browser):
     Args:
         driver: The nodriver Browser instance to clean up
     """
-    logging.debug("Performing browser cleanup...")
+    logger.debug("Performing browser cleanup...")
 
     # Get Browser instance process
     process = driver.get_process
     if process is None:
-        logging.debug("No process to clean up")
+        logger.debug("No process to clean up")
         return
 
     # Get the list of child processes before closing the Browser instance
     child_processes = psutil.Process(process.pid).children(recursive=True)
-    logging.debug(f"Found {len(child_processes)} child processes")
+    logger.debug(f"Found {len(child_processes)} child processes")
 
     # Stop Browser instance
     driver.stop()
-    logging.debug("Browser instance stopped")
+    logger.debug("Browser instance stopped")
 
     # Wait for the websocket to return True (Closed)
     websocket_wait_start = time.time()
     while True:
         websocket_status = driver.connection.closed
-        logging.debug(f"Websocket closed status: {websocket_status}")
+        logger.debug(f"Websocket closed status: {websocket_status}")
         if websocket_status:
             break
         # Timeout after 10 seconds
         if time.time() - websocket_wait_start > 10:
-            logging.warning("Timeout waiting for websocket to close")
+            logger.warning("Timeout waiting for websocket to close")
             break
         await asyncio.sleep(0.1)
 
@@ -598,16 +598,16 @@ async def after_run_cleanup(driver: nd.Browser):
     for proc in child_processes:
         try:
             if proc.pid == process.pid:
-                logging.debug(f"Terminating Chromium process with PID: {proc.pid}")
+                logger.debug(f"Terminating Chromium process with PID: {proc.pid}")
                 proc.terminate()
             elif any(name in proc.name().lower() for name in ("chromium", "chrome")):
-                logging.debug(f"Terminating Chromium child process with PID: {proc.pid}")
+                logger.debug(f"Terminating Chromium child process with PID: {proc.pid}")
                 proc.terminate()
             elif proc.status() == "zombie":
-                logging.debug(f"Terminating zombie Chromium process with PID: {proc.pid}")
+                logger.debug(f"Terminating zombie Chromium process with PID: {proc.pid}")
                 proc.terminate()
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as e:
-            logging.debug(f"Error terminating process {proc.pid}: {e}")
+            logger.debug(f"Error terminating process {proc.pid}: {e}")
 
     # Wait for all processes to terminate
     for proc in child_processes:
@@ -615,22 +615,22 @@ async def after_run_cleanup(driver: nd.Browser):
             if proc.pid == process.pid or any(name in proc.name().lower() for name in ("chromium", "chrome")):
                 proc.wait(timeout=10)
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, psutil.TimeoutExpired) as e:
-            logging.debug(f"Error waiting for process {proc.pid}: {e}")
+            logger.debug(f"Error waiting for process {proc.pid}: {e}")
 
     # Delete Browser instance data dir
     try:
         user_dir = driver.config.user_data_dir
         shutil.rmtree(user_dir, ignore_errors=False)
-        logging.debug(f"Removed Browser user data directory {user_dir}")
+        logger.debug(f"Removed Browser user data directory {user_dir}")
     except OSError as e:
-        logging.debug(f"Failed to delete Browser user data directory: {e}")
+        logger.debug(f"Failed to delete Browser user data directory: {e}")
 
     # Remove Browser instance from created instances
     try:
         nd.util.get_registered_instances().remove(driver)
-        logging.debug("Removed Browser from registered instances")
+        logger.debug("Removed Browser from registered instances")
     except Exception as e:
-        logging.debug(f"Error when removing the Browser instance: {e}")
+        logger.debug(f"Error when removing the Browser instance: {e}")
 
 
 def object_to_dict(_object):
