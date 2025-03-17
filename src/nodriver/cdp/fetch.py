@@ -290,7 +290,7 @@ def continue_request(
     if method is not None:
         params['method'] = method
     if post_data is not None:
-        params['postData'] = post_data
+        params['post_data'] = post_data
     if headers is not None:
         params['headers'] = [i.to_json() for i in headers]
     if intercept_response is not None:

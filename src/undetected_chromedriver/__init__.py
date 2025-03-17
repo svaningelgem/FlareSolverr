@@ -528,8 +528,8 @@ class Chrome(selenium.webdriver.chrome.webdriver.WebDriver):
                 self.execute_cdp_cmd(
                     "Network.setUserAgentOverride",
                     {
-                        "userAgent": self.execute_script(
-                            "return navigator.userAgent"
+                        "user_agent": self.execute_script(
+                            "return navigator.user_agent"
                         ).replace("Headless", "")
                     },
                 )

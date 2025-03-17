@@ -46,7 +46,7 @@ class TestFlareSolverr(unittest.TestCase):
         body = IndexResponse(res.json)
         self.assertEqual("FlareSolverr is ready!", body.msg)
         self.assertEqual(utils.get_flaresolverr_version(), body.version)
-        self.assertIn("Chrome/", body.userAgent)
+        self.assertIn("Chrome/", body.user_agent)
 
     def test_health_endpoint(self):
         res = self.app.get("/health")
@@ -83,7 +83,7 @@ class TestFlareSolverr(unittest.TestCase):
         self.assertIs(len(solution.headers), 0)
         self.assertIn("<title>Google</title>", solution.response)
         self.assertGreater(len(solution.cookies), 0)
-        self.assertIn("Chrome/", solution.userAgent)
+        self.assertIn("Chrome/", solution.user_agent)
 
     def test_v1_endpoint_request_get_cloudflare_js_1(self):
         res = self.app.post_json("/v1", {"cmd": "request.get", "url": self.cloudflare_url})
@@ -102,7 +102,7 @@ class TestFlareSolverr(unittest.TestCase):
         self.assertIs(len(solution.headers), 0)
         self.assertIn("<title>nowSecure</title>", solution.response)
         self.assertGreater(len(solution.cookies), 0)
-        self.assertIn("Chrome/", solution.userAgent)
+        self.assertIn("Chrome/", solution.user_agent)
 
         cf_cookie = _find_obj_by_key("name", "cf_clearance", solution.cookies)
         self.assertIsNotNone(cf_cookie, "Cloudflare cookie not found")
@@ -125,7 +125,7 @@ class TestFlareSolverr(unittest.TestCase):
         self.assertIs(len(solution.headers), 0)
         self.assertIn("<title>harry - idope torrent search</title>", solution.response)
         self.assertGreater(len(solution.cookies), 0)
-        self.assertIn("Chrome/", solution.userAgent)
+        self.assertIn("Chrome/", solution.user_agent)
 
         cf_cookie = _find_obj_by_key("name", "cf_clearance", solution.cookies)
         self.assertIsNotNone(cf_cookie, "Cloudflare cookie not found")
@@ -148,7 +148,7 @@ class TestFlareSolverr(unittest.TestCase):
         self.assertIs(len(solution.headers), 0)
         self.assertIn("<title>AniDex</title>", solution.response)
         self.assertGreater(len(solution.cookies), 0)
-        self.assertIn("Chrome/", solution.userAgent)
+        self.assertIn("Chrome/", solution.user_agent)
 
         cf_cookie = _find_obj_by_key("name", "__ddg1_", solution.cookies)
         self.assertIsNotNone(cf_cookie, "DDOS-Guard cookie not found")
@@ -171,7 +171,7 @@ class TestFlareSolverr(unittest.TestCase):
         self.assertIs(len(solution.headers), 0)
         self.assertIn("<title>Rental Apartments Amsterdam</title>", solution.response)
         self.assertGreater(len(solution.cookies), 0)
-        self.assertIn("Chrome/", solution.userAgent)
+        self.assertIn("Chrome/", solution.user_agent)
 
         cf_cookie = _find_obj_by_key("name", "fl_pass_v2_b", solution.cookies)
         self.assertIsNotNone(cf_cookie, "Fairlane cookie not found")
@@ -194,7 +194,7 @@ class TestFlareSolverr(unittest.TestCase):
         self.assertIs(len(solution.headers), 0)
         self.assertIn("<title>MuziekFabriek : Aanmelden</title>", solution.response)
         self.assertGreater(len(solution.cookies), 0)
-        self.assertIn("Chrome/", solution.userAgent)
+        self.assertIn("Chrome/", solution.user_agent)
 
         cf_cookie = _find_obj_by_key("name", "ct_anti_ddos_key", solution.cookies)
         self.assertIsNotNone(cf_cookie, "Custom Cloudflare cookie not found")
@@ -248,7 +248,7 @@ class TestFlareSolverr(unittest.TestCase):
         self.assertIs(len(solution.headers), 0)
         self.assertIn("<title>Google</title>", solution.response)
         self.assertGreater(len(solution.cookies), 1)
-        self.assertIn("Chrome/", solution.userAgent)
+        self.assertIn("Chrome/", solution.user_agent)
 
         user_cookie1 = _find_obj_by_key("name", "testcookie1", solution.cookies)
         self.assertIsNotNone(user_cookie1, "User cookie 1 not found")
@@ -278,7 +278,7 @@ class TestFlareSolverr(unittest.TestCase):
         self.assertIsNone(solution.headers)
         self.assertIsNone(solution.response)
         self.assertGreater(len(solution.cookies), 0)
-        self.assertIn("Chrome/", solution.userAgent)
+        self.assertIn("Chrome/", solution.user_agent)
 
     def test_v1_endpoint_request_get_proxy_http_param(self):
         """
@@ -312,7 +312,7 @@ class TestFlareSolverr(unittest.TestCase):
         self.assertIs(len(solution.headers), 0)
         self.assertIn("<title>Google</title>", solution.response)
         self.assertGreater(len(solution.cookies), 0)
-        self.assertIn("Chrome/", solution.userAgent)
+        self.assertIn("Chrome/", solution.user_agent)
 
     def test_v1_endpoint_request_get_proxy_http_param_with_credentials(self):
         """
@@ -351,7 +351,7 @@ class TestFlareSolverr(unittest.TestCase):
         self.assertIs(len(solution.headers), 0)
         self.assertIn("<title>Google</title>", solution.response)
         self.assertGreater(len(solution.cookies), 0)
-        self.assertIn("Chrome/", solution.userAgent)
+        self.assertIn("Chrome/", solution.user_agent)
 
     def test_v1_endpoint_request_get_proxy_socks_param(self):
         """
@@ -384,7 +384,7 @@ class TestFlareSolverr(unittest.TestCase):
         self.assertIs(len(solution.headers), 0)
         self.assertIn("<title>Google</title>", solution.response)
         self.assertGreater(len(solution.cookies), 0)
-        self.assertIn("Chrome/", solution.userAgent)
+        self.assertIn("Chrome/", solution.user_agent)
 
     def test_v1_endpoint_request_get_proxy_wrong_param(self):
         res = self.app.post_json(
@@ -411,7 +411,7 @@ class TestFlareSolverr(unittest.TestCase):
     def test_v1_endpoint_request_get_fail_timeout(self):
         res = self.app.post_json(
             "/v1",
-            {"cmd": "request.get", "url": self.google_url, "maxTimeout": 10},
+            {"cmd": "request.get", "url": self.google_url, "max_timeout": 10},
             status=500,
         )
         self.assertEqual(res.status_code, 500)
@@ -444,7 +444,7 @@ class TestFlareSolverr(unittest.TestCase):
             {
                 "cmd": "request.get",
                 "url": self.google_url,
-                "userAgent": "Test User-Agent",  # was removed in v2, not used
+                "user_agent": "Test User-Agent",  # was removed in v2, not used
             },
         )
         self.assertEqual(res.status_code, 200)
@@ -459,7 +459,7 @@ class TestFlareSolverr(unittest.TestCase):
             {
                 "cmd": "request.post",
                 "url": self.post_url,
-                "postData": "param1=value1&param2=value2",
+                "post_data": "param1=value1&param2=value2",
             },
         )
         self.assertEqual(res.status_code, 200)
@@ -480,7 +480,7 @@ class TestFlareSolverr(unittest.TestCase):
             solution.response,
         )
         self.assertEqual(len(solution.cookies), 0)
-        self.assertIn("Chrome/", solution.userAgent)
+        self.assertIn("Chrome/", solution.user_agent)
 
     def test_v1_endpoint_request_post_cloudflare(self):
         res = self.app.post_json(
@@ -488,7 +488,7 @@ class TestFlareSolverr(unittest.TestCase):
             {
                 "cmd": "request.post",
                 "url": self.cloudflare_url,
-                "postData": "param1=value1&param2=value2",
+                "post_data": "param1=value1&param2=value2",
             },
         )
         self.assertEqual(res.status_code, 200)
@@ -506,7 +506,7 @@ class TestFlareSolverr(unittest.TestCase):
         self.assertIs(len(solution.headers), 0)
         self.assertIn("<title>405 Not Allowed</title>", solution.response)
         self.assertGreater(len(solution.cookies), 0)
-        self.assertIn("Chrome/", solution.userAgent)
+        self.assertIn("Chrome/", solution.user_agent)
 
         cf_cookie = _find_obj_by_key("name", "cf_clearance", solution.cookies)
         self.assertIsNotNone(cf_cookie, "Cloudflare cookie not found")
@@ -519,7 +519,7 @@ class TestFlareSolverr(unittest.TestCase):
         body = V1ResponseBase(res.json)
         self.assertEqual(STATUS_ERROR, body.status)
         self.assertIn(
-            "Request parameter 'postData' is mandatory in 'request.post' command",
+            "Request parameter 'post_data' is mandatory in 'request.post' command",
             body.message,
         )
 
@@ -529,8 +529,8 @@ class TestFlareSolverr(unittest.TestCase):
             {
                 "cmd": "request.post",
                 "url": self.google_url,
-                "postData": "param1=value1&param2=value2",
-                "userAgent": "Test User-Agent",  # was removed in v2, not used
+                "post_data": "param1=value1&param2=value2",
+                "user_agent": "Test User-Agent",  # was removed in v2, not used
             },
         )
         self.assertEqual(res.status_code, 200)

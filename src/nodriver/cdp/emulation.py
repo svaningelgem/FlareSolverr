@@ -1156,7 +1156,7 @@ def set_user_agent_override(
     :param user_agent_metadata: **(EXPERIMENTAL)** *(Optional)* To be sent in Sec-CH-UA-* headers and returned in navigator.userAgentData
     '''
     params: T_JSON_DICT = dict()
-    params['userAgent'] = user_agent
+    params['user_agent'] = user_agent
     if accept_language is not None:
         params['acceptLanguage'] = accept_language
     if platform is not None:

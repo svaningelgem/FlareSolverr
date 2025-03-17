@@ -49,16 +49,20 @@ def call_service(method_name: str, *args, **kwargs) -> Any:
 def setup_logging() -> None:
     """Configure loguru logger"""
 
-    # Remove the default handler
-    logger.remove()
+    log_level = os.environ.get("LOG_LEVEL", "DEBUG").upper()
+    if log_level != "DEBUG":  # Loguru's default is already DEBUG, with a good debugging format
+        log_format = "<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>"
 
-    # Add console logger with the format
-    logger.add(
-        sys.stdout,
-        format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>",
-        level=os.environ.get("LOG_LEVEL", "DEBUG").upper(),
-        colorize=True,
-    )
+        # Remove the default handler
+        logger.remove()
+
+        # Add console logger with the format
+        logger.add(
+            sys.stdout,
+            format=log_format,
+            level=log_level,
+            colorize=True,
+        )
 
 
 class JSONErrorBottle(Bottle):

@@ -30,7 +30,7 @@ def asset_cloudflare_solution(self, res, site_url, site_text):
     self.assertIs(len(solution.headers), 0)
     self.assertIn(site_text, solution.response)
     self.assertGreater(len(solution.cookies), 0)
-    self.assertIn("Chrome/", solution.userAgent)
+    self.assertIn("Chrome/", solution.user_agent)
 
     cf_cookie = _find_obj_by_key("name", "cf_clearance", solution.cookies)
     self.assertIsNotNone(cf_cookie, "Cloudflare cookie not found")
@@ -147,7 +147,7 @@ class TestFlareSolverr(unittest.TestCase):
             with self.subTest(msg=site_name):
                 res = self.app.post_json(
                     "/v1",
-                    {"cmd": "request.post", "url": site_url, "postData": post_data},
+                    {"cmd": "request.post", "url": site_url, "post_data": post_data},
                 )
                 asset_cloudflare_solution(self, res, site_url, site_text)
 

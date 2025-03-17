@@ -302,7 +302,7 @@ def _set_user_agent_cached(user_agent: str) -> None:
     logger.info(f"Stored User-Agent: {_user_agent_cache}")
 
 
-async def get_user_agent_nd(driver=None) -> str:
+async def get_user_agent_nd(driver=None) -> str | None:
     """Get User-Agent string from nodriver browser"""
     cached = _get_user_agent_cached()
     if cached:
@@ -327,7 +327,7 @@ async def get_user_agent_nd(driver=None) -> str:
             logger.debug("Cleaned up temporary browser")
 
 
-def get_user_agent_uc(driver=None) -> str:
+def get_user_agent_uc(driver=None) -> str | None:
     """Get User-Agent string from undetected-chromedriver browser"""
     cached = _get_user_agent_cached()
     if cached:
@@ -340,7 +340,7 @@ def get_user_agent_uc(driver=None) -> str:
             temp_driver = get_webdriver_uc()
             driver = temp_driver
 
-        user_agent = driver.execute_script("return navigator.userAgent")
+        user_agent = driver.execute_script("return navigator.user_agent")
         _set_user_agent_cached(user_agent)
         return _get_user_agent_cached()
     except Exception as e:

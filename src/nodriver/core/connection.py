@@ -491,7 +491,7 @@ class Connection(metaclass=CantTouchThis):
             return
         response, error = await self._send_oneshot(
             cdp.runtime.evaluate(
-                expression="navigator.userAgent",
+                expression="navigator.user_agent",
                 user_gesture=True,
                 await_promise=True,
                 return_by_value=True,

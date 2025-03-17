@@ -213,7 +213,7 @@ class AsyncService(BaseService[Browser]):
         res = IndexResponse({})
         res.msg = "FlareSolverr is ready!"
         res.version = utils.get_flaresolverr_version()
-        res.userAgent = await utils.get_user_agent_nd()
+        res.user_agent = await utils.get_user_agent_nd()
         return res
 
     async def health_endpoint(self) -> HealthResponse:
@@ -224,7 +224,6 @@ class AsyncService(BaseService[Browser]):
     async def controller_v1_endpoint(self, req: V1RequestBase) -> V1ResponseBase:
         start_ts = int(time.time() * 1000)
         logging.info(f"Incoming request => POST /v1 body: {utils.object_to_dict(req)}")
-        res: V1ResponseBase
         try:
             res = await self._controller_v1_handler(req)
         except Exception as e:
@@ -245,14 +244,10 @@ class AsyncService(BaseService[Browser]):
         # do some validations
         if req.cmd is None:
             raise Exception("Request parameter 'cmd' is mandatory.")
-        if req.headers is not None:
-            logging.warning("Request parameter 'headers' was removed in FlareSolverr v2.")
-        if req.userAgent is not None:
-            logging.warning("Request parameter 'userAgent' was removed in FlareSolverr v2.")
 
         # set default values
-        if req.maxTimeout is None or req.maxTimeout < 1:
-            req.maxTimeout = 60000
+        if req.max_timeout is None or req.max_timeout < 1:
+            req.max_timeout = 60000
 
         # execute the command
         res: V1ResponseBase
@@ -275,12 +270,6 @@ class AsyncService(BaseService[Browser]):
         # do some validations
         if req.url is None:
             raise Exception("Request parameter 'url' is mandatory in 'request.get' command.")
-        if req.postData is not None:
-            raise Exception("Cannot use 'postBody' when sending a GET request.")
-        if req.returnRawHtml is not None:
-            logging.warning("Request parameter 'returnRawHtml' was removed in FlareSolverr v2.")
-        if req.download is not None:
-            logging.warning("Request parameter 'download' was removed in FlareSolverr v2.")
 
         challenge_res = await self._resolve_challenge(req, "GET")
         res = V1ResponseBase({})
@@ -291,13 +280,6 @@ class AsyncService(BaseService[Browser]):
 
     async def _cmd_request_post(self, req: V1RequestBase) -> V1ResponseBase:
         # do some validations
-        if req.postData is None:
-            raise Exception("Request parameter 'postData' is mandatory in 'request.post' command.")
-        if req.returnRawHtml is not None:
-            logging.warning("Request parameter 'returnRawHtml' was removed in FlareSolverr v2.")
-        if req.download is not None:
-            logging.warning("Request parameter 'download' was removed in FlareSolverr v2.")
-
         challenge_res = await self._resolve_challenge(req, "POST")
         res = V1ResponseBase({})
         res.status = challenge_res.status
@@ -343,7 +325,7 @@ class AsyncService(BaseService[Browser]):
         return V1ResponseBase({"status": STATUS_OK, "message": "The session has been removed."})
 
     async def _resolve_challenge(self, req: V1RequestBase, method: str) -> ChallengeResolutionT:
-        timeout = req.maxTimeout / 1000
+        timeout = req.max_timeout / 1000
         driver = None
         try:
             if req.session:
@@ -552,7 +534,7 @@ class AsyncService(BaseService[Browser]):
         challenge_res.user_agent = await utils.get_user_agent_nd(driver)  # Updated variable name
 
         if not req.return_only_cookies:  # Updated variable name
-            challenge_res.headers = {}  # nodriver should support this in the future
+            challenge_res.headers = []  # nodriver should support this in the future
             logging.debug("requesting html content from the tab")
             challenge_res.response = await tab.get_content(_node=doc)
 

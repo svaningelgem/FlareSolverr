@@ -459,7 +459,7 @@ def get_version() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typing.Tuple[str, 
         0. **protocolVersion** - Protocol version.
         1. **product** - Product name.
         2. **revision** - Product revision.
-        3. **userAgent** - User-Agent.
+        3. **user_agent** - User-Agent.
         4. **jsVersion** - V8 version.
     '''
     cmd_dict: T_JSON_DICT = {
@@ -470,7 +470,7 @@ def get_version() -> typing.Generator[T_JSON_DICT,T_JSON_DICT,typing.Tuple[str, 
         str(json['protocolVersion']),
         str(json['product']),
         str(json['revision']),
-        str(json['userAgent']),
+        str(json['user_agent']),
         str(json['jsVersion'])
     )
 

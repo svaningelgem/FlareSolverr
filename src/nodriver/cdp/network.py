@@ -432,7 +432,7 @@ class Request:
     #: Use postDataEntries instead.
     post_data: typing.Optional[str] = None
 
-    #: True when the request has POST data. Note that postData might still be omitted when this flag is true when the data is too long.
+    #: True when the request has POST data. Note that post_data might still be omitted when this flag is true when the data is too long.
     has_post_data: typing.Optional[bool] = None
 
     #: Request body elements (post data broken into individual entries).
@@ -462,7 +462,7 @@ class Request:
         if self.url_fragment is not None:
             json['urlFragment'] = self.url_fragment
         if self.post_data is not None:
-            json['postData'] = self.post_data
+            json['post_data'] = self.post_data
         if self.has_post_data is not None:
             json['hasPostData'] = self.has_post_data
         if self.post_data_entries is not None:
@@ -486,7 +486,7 @@ class Request:
             initial_priority=ResourcePriority.from_json(json['initialPriority']),
             referrer_policy=str(json['referrerPolicy']),
             url_fragment=str(json['urlFragment']) if json.get('urlFragment', None) is not None else None,
-            post_data=str(json['postData']) if json.get('postData', None) is not None else None,
+            post_data=str(json['post_data']) if json.get('post_data', None) is not None else None,
             has_post_data=bool(json['hasPostData']) if json.get('hasPostData', None) is not None else None,
             post_data_entries=[PostDataEntry.from_json(i) for i in json['postDataEntries']] if json.get('postDataEntries', None) is not None else None,
             mixed_content_type=security.MixedContentType.from_json(json['mixedContentType']) if json.get('mixedContentType', None) is not None else None,
@@ -2531,7 +2531,7 @@ def continue_intercepted_request(
     :param raw_response: *(Optional)* If set the requests completes using with the provided base64 encoded raw response, including HTTP status line and headers etc... Must not be set in response to an authChallenge. (Encoded as a base64 string when passed over JSON)
     :param url: *(Optional)* If set the request url will be modified in a way that's not observable by page. Must not be set in response to an authChallenge.
     :param method: *(Optional)* If set this allows the request method to be overridden. Must not be set in response to an authChallenge.
-    :param post_data: *(Optional)* If set this allows postData to be set. Must not be set in response to an authChallenge.
+    :param post_data: *(Optional)* If set this allows post_data to be set. Must not be set in response to an authChallenge.
     :param headers: *(Optional)* If set this allows the request headers to be changed. Must not be set in response to an authChallenge.
     :param auth_challenge_response: *(Optional)* Response to a requestIntercepted with an authChallenge. Must not be set otherwise.
     '''
@@ -2546,7 +2546,7 @@ def continue_intercepted_request(
     if method is not None:
         params['method'] = method
     if post_data is not None:
-        params['postData'] = post_data
+        params['post_data'] = post_data
     if headers is not None:
         params['headers'] = headers.to_json()
     if auth_challenge_response is not None:
@@ -2770,7 +2770,7 @@ def get_request_post_data(
         'params': params,
     }
     json = yield cmd_dict
-    return str(json['postData'])
+    return str(json['post_data'])
 
 
 def get_response_body_for_interception(
@@ -3091,7 +3091,7 @@ def set_user_agent_override(
     :param user_agent_metadata: **(EXPERIMENTAL)** *(Optional)* To be sent in Sec-CH-UA-* headers and returned in navigator.userAgentData
     '''
     params: T_JSON_DICT = dict()
-    params['userAgent'] = user_agent
+    params['user_agent'] = user_agent
     if accept_language is not None:
         params['acceptLanguage'] = accept_language
     if platform is not None:

@@ -271,7 +271,7 @@ class SyncService(BaseService[WebDriver]):
         res = IndexResponse({})
         res.msg = "FlareSolverr is ready!"
         res.version = utils.get_flaresolverr_version()
-        res.userAgent = utils.get_user_agent_uc()
+        res.user_agent = utils.get_user_agent_uc()
         return res
 
     def health_endpoint(self) -> HealthResponse:
@@ -303,14 +303,10 @@ class SyncService(BaseService[WebDriver]):
         # do some validations
         if req.cmd is None:
             raise Exception("Request parameter 'cmd' is mandatory.")
-        if req.headers is not None:
-            logging.warning("Request parameter 'headers' was removed in FlareSolverr v2.")
-        if req.userAgent is not None:
-            logging.warning("Request parameter 'userAgent' was removed in FlareSolverr v2.")
 
         # set default values
-        if req.maxTimeout is None or req.maxTimeout < 1:
-            req.maxTimeout = 60000
+        if req.max_timeout is None or req.max_timeout < 1:
+            req.max_timeout = 60000
 
         # execute the command
         res: V1ResponseBase
@@ -333,12 +329,8 @@ class SyncService(BaseService[WebDriver]):
         # do some validations
         if req.url is None:
             raise Exception("Request parameter 'url' is mandatory in 'request.get' command.")
-        if req.postData is not None:
+        if req.post_data is not None:
             raise Exception("Cannot use 'postBody' when sending a GET request.")
-        if req.returnRawHtml is not None:
-            logging.warning("Request parameter 'returnRawHtml' was removed in FlareSolverr v2.")
-        if req.download is not None:
-            logging.warning("Request parameter 'download' was removed in FlareSolverr v2.")
 
         challenge_res = self._resolve_challenge(req, "GET")
         res = V1ResponseBase({})
@@ -349,12 +341,8 @@ class SyncService(BaseService[WebDriver]):
 
     def _cmd_request_post(self, req: V1RequestBase) -> V1ResponseBase:
         # do some validations
-        if req.postData is None:
-            raise Exception("Request parameter 'postData' is mandatory in 'request.post' command.")
-        if req.returnRawHtml is not None:
-            logging.warning("Request parameter 'returnRawHtml' was removed in FlareSolverr v2.")
-        if req.download is not None:
-            logging.warning("Request parameter 'download' was removed in FlareSolverr v2.")
+        if req.post_data is None:
+            raise Exception("Request parameter 'post_data' is mandatory in 'request.post' command.")
 
         challenge_res = self._resolve_challenge(req, "POST")
         res = V1ResponseBase({})
