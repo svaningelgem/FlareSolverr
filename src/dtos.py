@@ -12,8 +12,8 @@ class ChallengeResolutionResultT:
 
     def __init__(self, _dict):
         # Convert old camelCase keys to snake_case for backward compatibility
-        if 'userAgent' in _dict:
-            _dict['user_agent'] = _dict.pop('userAgent')
+        if "userAgent" in _dict:
+            _dict["user_agent"] = _dict.pop("userAgent")
 
         self.__dict__.update(_dict)
 
@@ -29,7 +29,7 @@ class ChallengeResolutionT:
             self.result = ChallengeResolutionResultT(self.result)
 
 
-class V1RequestBase(object):
+class V1RequestBase:
     # V1RequestBase
     cmd: str = None
     cookies: list = None
@@ -45,25 +45,25 @@ class V1RequestBase(object):
 
     def __init__(self, _dict):
         # Convert old camelCase keys to snake_case for backward compatibility
-        if 'maxTimeout' in _dict:
-            _dict['max_timeout'] = _dict.pop('maxTimeout')
-        if 'userAgent' in _dict:
-            _dict.pop('userAgent')  # Ignore deprecated field
-        if 'postData' in _dict:
-            _dict['post_data'] = _dict.pop('postData')
-        if 'returnOnlyCookies' in _dict:
-            _dict['return_only_cookies'] = _dict.pop('returnOnlyCookies')
-        if 'returnRawHtml' in _dict:
-            _dict.pop('returnRawHtml')  # Ignore deprecated field
-        if 'download' in _dict:
-            _dict.pop('download')  # Ignore deprecated field
-        if 'headers' in _dict:
-            _dict.pop('headers')  # Ignore deprecated field
+        if "maxTimeout" in _dict:
+            _dict["max_timeout"] = _dict.pop("maxTimeout")
+        if "userAgent" in _dict:
+            _dict.pop("userAgent")  # Ignore deprecated field
+        if "postData" in _dict:
+            _dict["post_data"] = _dict.pop("postData")
+        if "returnOnlyCookies" in _dict:
+            _dict["return_only_cookies"] = _dict.pop("returnOnlyCookies")
+        if "returnRawHtml" in _dict:
+            _dict.pop("returnRawHtml")  # Ignore deprecated field
+        if "download" in _dict:
+            _dict.pop("download")  # Ignore deprecated field
+        if "headers" in _dict:
+            _dict.pop("headers")  # Ignore deprecated field
 
         self.__dict__.update(_dict)
 
 
-class V1ResponseBase(object):
+class V1ResponseBase:
     # V1ResponseBase
     status: str = None
     message: str = None
@@ -81,30 +81,30 @@ class V1ResponseBase(object):
 
     def __init__(self, _dict):
         # Convert old camelCase keys to snake_case for backward compatibility
-        if 'startTimestamp' in _dict:
-            _dict['start_timestamp'] = _dict.pop('startTimestamp')
-        if 'endTimestamp' in _dict:
-            _dict['end_timestamp'] = _dict.pop('endTimestamp')
+        if "startTimestamp" in _dict:
+            _dict["start_timestamp"] = _dict.pop("startTimestamp")
+        if "endTimestamp" in _dict:
+            _dict["end_timestamp"] = _dict.pop("endTimestamp")
 
         self.__dict__.update(_dict)
         if self.solution is not None:
             self.solution = ChallengeResolutionResultT(self.solution)
 
 
-class IndexResponse(object):
+class IndexResponse:
     msg: str = None
     version: str = None
     user_agent: str = None
 
     def __init__(self, _dict):
         # Convert old camelCase keys to snake_case for backward compatibility
-        if 'userAgent' in _dict:
-            _dict['user_agent'] = _dict.pop('userAgent')
+        if "userAgent" in _dict:
+            _dict["user_agent"] = _dict.pop("userAgent")
 
         self.__dict__.update(_dict)
 
 
-class HealthResponse(object):
+class HealthResponse:
     status: str = None
 
     def __init__(self, _dict):

@@ -1,61 +1,107 @@
+import asyncio
 import json
 import logging
 import os
-import re
-import shutil
-import time
-import urllib.parse
-import tempfile
-import asyncio
 import platform as plt
 import pprint
-
+import re
+import shutil
+import tempfile
+import time
+import urllib.parse
 from functools import lru_cache
-from sysconfig import get_python_version
+from typing import Optional
 
 import psutil
 from bs4 import BeautifulSoup
-
 from selenium.webdriver.chrome.webdriver import WebDriver
-import undetected_chromedriver as uc
-import nodriver as nd
 
-# Global variables - initialized on first use
-CHROME_EXE_PATH = None
-CHROME_MAJOR_VERSION = None
-USER_AGENT = None
-XVFB_DISPLAY = None
-PATCHED_DRIVER_PATH = None
-CLOUDFLARE_EXTENSION_DIR = None
-IS_ARMARCH = plt.machine().startswith(('arm', 'aarch'))
+import nodriver as nd
+import undetected_chromedriver as uc
+
+
+@lru_cache(1)
+def is_arm_arch() -> bool:
+    """Check if we're running on ARM architecture"""
+    return plt.machine().startswith(("arm", "aarch"))
 
 
 @lru_cache(1)
 def get_config_log_html() -> bool:
+    """Get LOG_HTML environment variable as boolean"""
     return os.environ.get("LOG_HTML", "false").lower() == "true"
 
 
 @lru_cache(1)
 def get_config_headless() -> bool:
+    """Get HEADLESS environment variable as boolean"""
     return os.environ.get("HEADLESS", "true").lower() == "true"
 
 
 @lru_cache(1)
 def get_flaresolverr_version() -> str:
-    package_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), os.pardir, "package.json"
-    )
+    """Get FlareSolverr version from package.json"""
+    package_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), os.pardir, "package.json")
     if not os.path.isfile(package_path):
-        package_path = os.path.join(
-            os.path.dirname(os.path.abspath(__file__)), "package.json"
-        )
+        package_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "package.json")
     with open(package_path) as f:
         return json.loads(f.read())["version"]
 
 
 @lru_cache(1)
 def get_driver_selection() -> str:
+    """Get DRIVER environment variable, defaulting to nodriver"""
     return os.environ.get("DRIVER", "nodriver")
+
+
+@lru_cache(1)
+def get_cloudflare_extension_dir() -> str:
+    """Create and return Chrome extension for CloudFlare challenge handling"""
+    manifest_json = """
+    {
+        "manifest_version": 3,
+        "name": "Turnstile Patcher",
+        "version": "2.1",
+        "content_scripts": [
+            {
+                "js": [
+                    "./script.js"
+                ],
+                "matches": [
+                    "<all_urls>"
+                ],
+                "run_at": "document_start",
+                "all_frames": true,
+                "world": "MAIN"
+            }
+        ]
+    }
+    """
+
+    script_js = """
+    Object.defineProperty(MouseEvent.prototype, 'screenX', {
+        get: function () {
+            return this.clientX + window.screenX;
+        }
+    });
+
+    Object.defineProperty(MouseEvent.prototype, 'screenY', {
+        get: function () {
+            return this.clientY + window.screenY;
+        }
+    });
+    """
+
+    extension_dir = tempfile.mkdtemp()
+    logging.debug(f"Created CloudFlare extension directory: {extension_dir}")
+
+    with open(os.path.join(extension_dir, "manifest.json"), "w") as f:
+        f.write(manifest_json)
+
+    with open(os.path.join(extension_dir, "script.js"), "w") as f:
+        f.write(script_js)
+
+    return extension_dir
 
 
 def create_proxy_extension(proxy: dict) -> str:
@@ -131,57 +177,213 @@ def create_proxy_extension(proxy: dict) -> str:
     return proxy_extension_dir
 
 
-def create_cloudflare_extension() -> str:
-    """Create a Chrome extension to handle CloudFlare challenges"""
-    global CLOUDFLARE_EXTENSION_DIR
-    if CLOUDFLARE_EXTENSION_DIR is not None:
-        return CLOUDFLARE_EXTENSION_DIR
+@lru_cache(1)
+def get_chrome_exe_path() -> str:
+    """Get the Chrome/Chromium executable path"""
+    # Check different possible locations
+    logging.debug("Searching for Chrome executable...")
 
-    manifest_json = """
-    {
-        "manifest_version": 3,
-        "name": "Turnstile Patcher",
-        "version": "2.1",
-        "content_scripts": [
-            {
-                "js": [
-                    "./script.js"
-                ],
-                "matches": [
-                    "<all_urls>"
-                ],
-                "run_at": "document_start",
-                "all_frames": true,
-                "world": "MAIN"
-            }
-        ]
-    }
-    """
+    # Linux pyinstaller bundle
+    chrome_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chrome", "chrome")
+    if os.path.exists(chrome_path):
+        logging.debug(f"Found Chrome at bundle path: {chrome_path}")
+        if not os.access(chrome_path, os.X_OK):
+            logging.error(f"Chrome binary '{chrome_path}' is not executable")
+            raise Exception(
+                f'Chrome binary "{chrome_path}" is not executable. '
+                f'Please, extract the archive with "tar xzf <file.tar.gz>".'
+            )
+        return chrome_path
 
-    script_js = """
-    Object.defineProperty(MouseEvent.prototype, 'screenX', {
-        get: function () {
-            return this.clientX + window.screenX;
-        }
-    });
+    # Windows pyinstaller bundle
+    chrome_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), "chrome", "chrome.exe")
+    if os.path.exists(chrome_path):
+        logging.debug(f"Found Chrome at Windows bundle path: {chrome_path}")
+        return chrome_path
 
-    Object.defineProperty(MouseEvent.prototype, 'screenY', {
-        get: function () {
-            return this.clientY + window.screenY;
-        }
-    });
-    """
+    # System installation
+    try:
+        path = uc.find_chrome_executable()
+        logging.debug(f"Found system Chrome at: {path}")
+        return path
+    except Exception as e:
+        logging.error(f"Failed to find Chrome executable: {e}")
+        raise
 
-    CLOUDFLARE_EXTENSION_DIR = tempfile.mkdtemp()
-    logging.debug(f"Created CloudFlare extension directory: {CLOUDFLARE_EXTENSION_DIR}")
 
-    with open(os.path.join(CLOUDFLARE_EXTENSION_DIR, "manifest.json"), "w") as f:
-        f.write(manifest_json)
+@lru_cache(1)
+def get_chrome_major_version() -> str:
+    """Get Chrome/Chromium major version"""
+    logging.debug("Detecting Chrome version...")
 
-    with open(os.path.join(CLOUDFLARE_EXTENSION_DIR, "script.js"), "w") as f:
-        f.write(script_js)
+    if os.name == "nt":
+        # Windows version detection
+        try:
+            complete_version = extract_version_nt_executable(get_chrome_exe_path())
+            logging.debug(f"Detected Chrome version from executable: {complete_version}")
+        except Exception as e:
+            logging.debug(f"Failed to get version from executable: {e}")
+            try:
+                complete_version = extract_version_nt_registry()
+                logging.debug(f"Detected Chrome version from registry: {complete_version}")
+            except Exception as e:
+                logging.debug(f"Failed to get version from registry: {e}")
+                complete_version = extract_version_nt_folder()
+                logging.debug(f"Detected Chrome version from folder: {complete_version}")
+    else:
+        # Linux/macOS version detection
+        chrome_path = get_chrome_exe_path()
+        logging.debug(f"Running '{chrome_path} --version' to detect version")
+        process = os.popen(f'"{chrome_path}" --version')
+        complete_version = process.read()
+        process.close()
+        logging.debug(f"Chrome version output: {complete_version}")
 
-    return CLOUDFLARE_EXTENSION_DIR
+    try:
+        major_version = complete_version.split(".")[0].split(" ")[-1]
+        logging.info(f"Detected Chrome major version: {major_version}")
+        return major_version
+    except Exception as e:
+        logging.error(f"Failed to parse Chrome version: {e}")
+        return ""
+
+
+def extract_version_nt_executable(exe_path: str) -> str:
+    """Extract Chrome version from Windows executable"""
+    import pefile
+
+    pe = pefile.PE(exe_path, fast_load=True)
+    pe.parse_data_directories(directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_RESOURCE"]])
+    return pe.FileInfo[0][0].StringTable[0].entries[b"FileVersion"].decode("utf-8")
+
+
+def extract_version_nt_registry() -> str:
+    """Extract Chrome version from Windows registry"""
+    registry_output = os.popen(
+        'reg query "HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Google Chrome"'
+    ).read()
+    version_start = registry_output.find("DisplayVersion    REG_SZ") + 24
+    version_end = registry_output.find("\n", version_start)
+    return registry_output[version_start:version_end].strip()
+
+
+def extract_version_nt_folder() -> str:
+    """Extract Chrome version from Windows Program Files folder"""
+    # Check if the Chrome folder exists in the x32 or x64 Program Files folders
+    for i in range(2):
+        path = "C:\\Program Files" + (" (x86)" if i else "") + "\\Google\\Chrome\\Application"
+        if os.path.isdir(path):
+            paths = [f.path for f in os.scandir(path) if f.is_dir()]
+            for path in paths:
+                filename = os.path.basename(path)
+                pattern = r"\d+\.\d+\.\d+\.\d+"
+                match = re.search(pattern, filename)
+                if match and match.group():
+                    # Found a Chrome version
+                    return match.group(0)
+    return ""
+
+
+# User-Agent cache
+_user_agent_cache = None
+
+
+def _get_user_agent_cached() -> Optional[str]:
+    """Get cached user agent if available"""
+    global _user_agent_cache
+    return _user_agent_cache
+
+
+def _set_user_agent_cached(user_agent: str) -> None:
+    """Cache user agent value"""
+    global _user_agent_cache
+    # Fix for Chrome 117 | https://github.com/FlareSolverr/FlareSolverr/issues/910
+    _user_agent_cache = re.sub("HEADLESS", "", user_agent, flags=re.IGNORECASE)
+    logging.info(f"Stored User-Agent: {_user_agent_cache}")
+
+
+async def get_user_agent_nd(driver=None) -> str:
+    """Get User-Agent string from nodriver browser"""
+    cached = _get_user_agent_cached()
+    if cached:
+        return cached
+
+    temp_driver = None
+    try:
+        if driver is None:
+            logging.info("Creating temporary browser to get User-Agent...")
+            temp_driver = await get_webdriver_nd()
+            driver = temp_driver
+
+        user_agent = driver.info["User-Agent"]
+        _set_user_agent_cached(user_agent)
+        return _get_user_agent_cached()
+    except Exception as e:
+        logging.error(f"Error getting browser User-Agent: {e}")
+        raise Exception(f"Error getting browser User-Agent: {e}") from e
+    finally:
+        if temp_driver is not None:
+            await after_run_cleanup(driver=temp_driver)
+            logging.debug("Cleaned up temporary browser")
+
+
+def get_user_agent_uc(driver=None) -> str:
+    """Get User-Agent string from undetected-chromedriver browser"""
+    cached = _get_user_agent_cached()
+    if cached:
+        return cached
+
+    temp_driver = None
+    try:
+        if driver is None:
+            logging.info("Creating temporary browser to get User-Agent...")
+            temp_driver = get_webdriver_uc()
+            driver = temp_driver
+
+        user_agent = driver.execute_script("return navigator.userAgent")
+        _set_user_agent_cached(user_agent)
+        return _get_user_agent_cached()
+    except Exception as e:
+        logging.error(f"Error getting browser User-Agent: {e}")
+        raise Exception(f"Error getting browser User-Agent: {e}") from e
+    finally:
+        if temp_driver is not None:
+            if os.name == "nt":
+                temp_driver.close()
+            temp_driver.quit()
+            logging.debug("Cleaned up temporary browser")
+
+
+# Patched driver path cache
+_patched_driver_path = None
+
+
+def get_patched_driver_path() -> Optional[str]:
+    """Get cached patched driver path if available"""
+    global _patched_driver_path
+    return _patched_driver_path
+
+
+def set_patched_driver_path(path: str) -> None:
+    """Cache patched driver path"""
+    global _patched_driver_path
+    _patched_driver_path = path
+    logging.debug(f"Stored patched driver path: {_patched_driver_path}")
+
+
+# Xvfb display instance cache
+_xvfb_display = None
+
+
+def start_xvfb_display():
+    """Start virtual X display for headless mode on Linux"""
+    global _xvfb_display
+    if _xvfb_display is None:
+        from xvfbwrapper import Xvfb
+
+        _xvfb_display = Xvfb()
+        _xvfb_display.start()
+        logging.debug("VIRTUAL SCREEN STARTED")
 
 
 async def get_webdriver_nd(proxy: dict = None) -> nd.Browser:
@@ -193,12 +395,13 @@ async def get_webdriver_nd(proxy: dict = None) -> nd.Browser:
     options.add_argument("--window-size=1920,1080")
     options.add_argument("--use-gl=swiftshader")
 
-    options.lang = os.environ.get("LANG", 'en')
+    options.lang = os.environ.get("LANG", "en")
 
-    # Fix for Chrome 117 | https://github.com/FlareSolverr/FlareSolverr/issues/910
-    if USER_AGENT is not None:
-        options.add_argument("--user-agent=%s" % USER_AGENT)
-        logging.debug(f"Using custom user agent: {USER_AGENT}")
+    # Add user agent if we have it cached
+    cached_ua = _get_user_agent_cached()
+    if cached_ua:
+        options.add_argument(f"--user-agent={cached_ua}")
+        logging.debug(f"Using cached user agent: {cached_ua}")
 
     proxy_extension_dir = None
     if proxy and all(key in proxy for key in ["url", "username", "password"]):
@@ -208,11 +411,11 @@ async def get_webdriver_nd(proxy: dict = None) -> nd.Browser:
     elif proxy and "url" in proxy:
         proxy_url = proxy["url"]
         logging.info(f"Using proxy: {proxy_url}")
-        options.add_argument("--proxy-server=%s" % proxy_url)
+        options.add_argument(f"--proxy-server={proxy_url}")
 
     # Add cloudflare extension
     # https://github.com/TheFalloutOf76/CDP-bug-MouseEvent-.screenX-.screenY-patcher
-    cloudflare_extension_dir = create_cloudflare_extension()
+    cloudflare_extension_dir = get_cloudflare_extension_dir()
     options.add_extension(os.path.abspath(cloudflare_extension_dir))
     logging.debug("Added CloudFlare extension")
 
@@ -249,48 +452,45 @@ async def get_webdriver_nd(proxy: dict = None) -> nd.Browser:
 
 def get_webdriver_uc(proxy: dict = None) -> WebDriver:
     """Get an undetected-chromedriver instance"""
-    global PATCHED_DRIVER_PATH, USER_AGENT
-
     logging.info("Launching web browser with undetected-chromedriver...")
 
     # undetected_chromedriver options
     options = uc.ChromeOptions()
     options.add_argument("--no-sandbox")
     options.add_argument("--window-size=1920,1080")
-    options.add_argument('--disable-search-engine-choice-screen')
+    options.add_argument("--disable-search-engine-choice-screen")
     options.add_argument("--disable-setuid-sandbox")
     options.add_argument("--disable-dev-shm-usage")
     options.add_argument("--no-zygote")
 
-    if IS_ARMARCH:
-        options.add_argument('--disable-gpu-sandbox')
-        options.add_argument('--disable-software-rasterizer')
+    if is_arm_arch():
+        options.add_argument("--disable-gpu-sandbox")
+        options.add_argument("--disable-software-rasterizer")
         logging.debug("Added ARM architecture options")
 
     options.add_argument("--ignore-certificate-errors")
     options.add_argument("--ignore-ssl-errors")
     options.add_argument("--use-gl=swiftshader")
 
-    language = os.environ.get("LANG", 'en')
-    options.add_argument("--accept-lang=%s" % language)
+    language = os.environ.get("LANG", "en")
+    options.add_argument(f"--accept-lang={language}")
     logging.debug(f"Using language: {language}")
 
-    # Fix for Chrome 117 | https://github.com/FlareSolverr/FlareSolverr/issues/910
-    if USER_AGENT is not None:
-        options.add_argument("--user-agent=%s" % USER_AGENT)
-        logging.debug(f"Using custom user agent: {USER_AGENT}")
+    # Add user agent if we have it cached
+    cached_ua = _get_user_agent_cached()
+    if cached_ua:
+        options.add_argument(f"--user-agent={cached_ua}")
+        logging.debug(f"Using cached user agent: {cached_ua}")
 
     proxy_extension_dir = None
     if proxy and all(key in proxy for key in ["url", "username", "password"]):
         proxy_extension_dir = create_proxy_extension(proxy)
-        options.add_argument(
-            "--load-extension=%s" % os.path.abspath(proxy_extension_dir)
-        )
+        options.add_argument(f"--load-extension={os.path.abspath(proxy_extension_dir)}")
         logging.info(f"Using proxy extension for {proxy['url']}")
     elif proxy and "url" in proxy:
         proxy_url = proxy["url"]
         logging.info(f"Using proxy: {proxy_url}")
-        options.add_argument("--proxy-server=%s" % proxy_url)
+        options.add_argument(f"--proxy-server={proxy_url}")
 
     # Handle headless mode
     windows_headless = False
@@ -314,8 +514,9 @@ def get_webdriver_uc(proxy: dict = None) -> WebDriver:
         logging.debug("Using Docker chromedriver path")
     else:
         version_main = get_chrome_major_version()
-        if PATCHED_DRIVER_PATH is not None:
-            driver_exe_path = PATCHED_DRIVER_PATH
+        patched_path = get_patched_driver_path()
+        if patched_path:
+            driver_exe_path = patched_path
             logging.debug(f"Using existing patched driver: {driver_exe_path}")
 
     # Detect chrome path
@@ -323,7 +524,7 @@ def get_webdriver_uc(proxy: dict = None) -> WebDriver:
     logging.debug(f"Using Chrome executable: {browser_executable_path}")
 
     # Log all options
-    all_options = [opt for opt in options.arguments]
+    all_options = list(options.arguments)
     logging.debug("Chrome options: " + pprint.pformat(all_options))
 
     # Downloads and patches the chromedriver
@@ -342,13 +543,12 @@ def get_webdriver_uc(proxy: dict = None) -> WebDriver:
         raise
 
     # Save the patched driver to avoid re-downloads
-    if driver_exe_path is None:
-        PATCHED_DRIVER_PATH = os.path.join(
-            driver.patcher.data_path, driver.patcher.exe_name
-        )
-        if PATCHED_DRIVER_PATH != driver.patcher.executable_path:
-            shutil.copy(driver.patcher.executable_path, PATCHED_DRIVER_PATH)
-            logging.debug(f"Saved patched driver to: {PATCHED_DRIVER_PATH}")
+    if driver_exe_path is None and hasattr(driver, "patcher"):
+        new_path = os.path.join(driver.patcher.data_path, driver.patcher.exe_name)
+        if new_path != driver.patcher.executable_path:
+            shutil.copy(driver.patcher.executable_path, new_path)
+            logging.debug(f"Saved patched driver to: {new_path}")
+            set_patched_driver_path(new_path)
 
     # Clean up proxy extension directory
     if proxy_extension_dir is not None:
@@ -356,189 +556,6 @@ def get_webdriver_uc(proxy: dict = None) -> WebDriver:
         logging.debug(f"Removed proxy extension directory: {proxy_extension_dir}")
 
     return driver
-
-
-def get_chrome_exe_path() -> str:
-    """Get the Chrome/Chromium executable path"""
-    global CHROME_EXE_PATH
-    if CHROME_EXE_PATH is not None:
-        return CHROME_EXE_PATH
-
-    # Check different possible locations
-    logging.debug("Searching for Chrome executable...")
-
-    # Linux pyinstaller bundle
-    chrome_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "chrome", "chrome"
-    )
-    if os.path.exists(chrome_path):
-        logging.debug(f"Found Chrome at bundle path: {chrome_path}")
-        if not os.access(chrome_path, os.X_OK):
-            logging.error(f"Chrome binary '{chrome_path}' is not executable")
-            raise Exception(
-                f'Chrome binary "{chrome_path}" is not executable. '
-                f'Please, extract the archive with "tar xzf <file.tar.gz>".'
-            )
-        CHROME_EXE_PATH = chrome_path
-        return CHROME_EXE_PATH
-
-    # Windows pyinstaller bundle
-    chrome_path = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)), "chrome", "chrome.exe"
-    )
-    if os.path.exists(chrome_path):
-        logging.debug(f"Found Chrome at Windows bundle path: {chrome_path}")
-        CHROME_EXE_PATH = chrome_path
-        return CHROME_EXE_PATH
-
-    # System installation
-    try:
-        CHROME_EXE_PATH = uc.find_chrome_executable()
-        logging.debug(f"Found system Chrome at: {CHROME_EXE_PATH}")
-    except Exception as e:
-        logging.error(f"Failed to find Chrome executable: {e}")
-        raise
-
-    return CHROME_EXE_PATH
-
-
-def get_chrome_major_version() -> str:
-    """Get Chrome/Chromium major version"""
-    global CHROME_MAJOR_VERSION
-    if CHROME_MAJOR_VERSION is not None:
-        return CHROME_MAJOR_VERSION
-
-    logging.debug("Detecting Chrome version...")
-
-    if os.name == "nt":
-        # Windows version detection
-        try:
-            complete_version = extract_version_nt_executable(get_chrome_exe_path())
-            logging.debug(f"Detected Chrome version from executable: {complete_version}")
-        except Exception as e:
-            logging.debug(f"Failed to get version from executable: {e}")
-            try:
-                complete_version = extract_version_nt_registry()
-                logging.debug(f"Detected Chrome version from registry: {complete_version}")
-            except Exception as e:
-                logging.debug(f"Failed to get version from registry: {e}")
-                complete_version = extract_version_nt_folder()
-                logging.debug(f"Detected Chrome version from folder: {complete_version}")
-    else:
-        # Linux/macOS version detection
-        chrome_path = get_chrome_exe_path()
-        logging.debug(f"Running '{chrome_path} --version' to detect version")
-        process = os.popen(f'"{chrome_path}" --version')
-        complete_version = process.read()
-        process.close()
-        logging.debug(f"Chrome version output: {complete_version}")
-
-    try:
-        CHROME_MAJOR_VERSION = complete_version.split(".")[0].split(" ")[-1]
-        logging.info(f"Detected Chrome major version: {CHROME_MAJOR_VERSION}")
-    except Exception as e:
-        logging.error(f"Failed to parse Chrome version: {e}")
-        CHROME_MAJOR_VERSION = ""
-
-    return CHROME_MAJOR_VERSION
-
-
-def extract_version_nt_executable(exe_path: str) -> str:
-    """Extract Chrome version from Windows executable"""
-    import pefile
-
-    pe = pefile.PE(exe_path, fast_load=True)
-    pe.parse_data_directories(
-        directories=[pefile.DIRECTORY_ENTRY["IMAGE_DIRECTORY_ENTRY_RESOURCE"]]
-    )
-    return pe.FileInfo[0][0].StringTable[0].entries[b"FileVersion"].decode("utf-8")
-
-
-def extract_version_nt_registry() -> str:
-    """Extract Chrome version from Windows registry"""
-    registry_output = os.popen(
-        'reg query "HKLM\\SOFTWARE\\Wow6432Node\\Microsoft\\Windows\\CurrentVersion\\Uninstall\\Google Chrome"'
-    ).read()
-    version_start = registry_output.find("DisplayVersion    REG_SZ") + 24
-    version_end = registry_output.find("\n", version_start)
-    return registry_output[version_start:version_end].strip()
-
-
-def extract_version_nt_folder() -> str:
-    """Extract Chrome version from Windows Program Files folder"""
-    # Check if the Chrome folder exists in the x32 or x64 Program Files folders
-    for i in range(2):
-        path = (
-                "C:\\Program Files"
-                + (" (x86)" if i else "")
-                + "\\Google\\Chrome\\Application"
-        )
-        if os.path.isdir(path):
-            paths = [f.path for f in os.scandir(path) if f.is_dir()]
-            for path in paths:
-                filename = os.path.basename(path)
-                pattern = r"\d+\.\d+\.\d+\.\d+"
-                match = re.search(pattern, filename)
-                if match and match.group():
-                    # Found a Chrome version
-                    return match.group(0)
-    return ""
-
-
-async def get_user_agent_nd(driver=None) -> str:
-    """Get User-Agent string from nodriver browser"""
-    global USER_AGENT
-    if USER_AGENT is not None:
-        return USER_AGENT
-
-    temp_driver = None
-    try:
-        if driver is None:
-            logging.info("Creating temporary browser to get User-Agent...")
-            temp_driver = await get_webdriver_nd()
-            driver = temp_driver
-
-        USER_AGENT = driver.info["User-Agent"]
-        # Fix for Chrome 117 | https://github.com/FlareSolverr/FlareSolverr/issues/910
-        USER_AGENT = re.sub("HEADLESS", "", USER_AGENT, flags=re.IGNORECASE)
-        logging.info(f"Detected User-Agent: {USER_AGENT}")
-        return USER_AGENT
-    except Exception as e:
-        logging.error(f"Error getting browser User-Agent: {e}")
-        raise Exception(f"Error getting browser User-Agent: {e}") from e
-    finally:
-        if temp_driver is not None:
-            await after_run_cleanup(driver=temp_driver)
-            logging.debug("Cleaned up temporary browser")
-
-
-def get_user_agent_uc(driver=None) -> str:
-    """Get User-Agent string from undetected-chromedriver browser"""
-    global USER_AGENT
-    if USER_AGENT is not None:
-        return USER_AGENT
-
-    temp_driver = None
-    try:
-        if driver is None:
-            logging.info("Creating temporary browser to get User-Agent...")
-            temp_driver = get_webdriver_uc()
-            driver = temp_driver
-
-        USER_AGENT = driver.execute_script("return navigator.userAgent")
-        # Fix for Chrome 117 | https://github.com/FlareSolverr/FlareSolverr/issues/910
-        USER_AGENT = re.sub("HEADLESS", "", USER_AGENT, flags=re.IGNORECASE)
-        logging.info(f"Detected User-Agent: {USER_AGENT}")
-        return USER_AGENT
-    except Exception as e:
-        logging.error(f"Error getting browser User-Agent: {e}")
-        raise Exception(f"Error getting browser User-Agent: {e}") from e
-    finally:
-        if temp_driver is not None:
-            if os.name == "nt":
-                temp_driver.close()
-            temp_driver.quit()
-            logging.debug("Cleaned up temporary browser")
 
 
 async def after_run_cleanup(driver: nd.Browser):
@@ -584,14 +601,10 @@ async def after_run_cleanup(driver: nd.Browser):
                 logging.debug(f"Terminating Chromium process with PID: {proc.pid}")
                 proc.terminate()
             elif any(name in proc.name().lower() for name in ("chromium", "chrome")):
-                logging.debug(
-                    f"Terminating Chromium child process with PID: {proc.pid}"
-                )
+                logging.debug(f"Terminating Chromium child process with PID: {proc.pid}")
                 proc.terminate()
             elif proc.status() == "zombie":
-                logging.debug(
-                    f"Terminating zombie Chromium process with PID: {proc.pid}"
-                )
+                logging.debug(f"Terminating zombie Chromium process with PID: {proc.pid}")
                 proc.terminate()
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess) as e:
             logging.debug(f"Error terminating process {proc.pid}: {e}")
@@ -599,9 +612,7 @@ async def after_run_cleanup(driver: nd.Browser):
     # Wait for all processes to terminate
     for proc in child_processes:
         try:
-            if proc.pid == process.pid or any(
-                    name in proc.name().lower() for name in ("chromium", "chrome")
-            ):
+            if proc.pid == process.pid or any(name in proc.name().lower() for name in ("chromium", "chrome")):
                 proc.wait(timeout=10)
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess, psutil.TimeoutExpired) as e:
             logging.debug(f"Error waiting for process {proc.pid}: {e}")
@@ -612,9 +623,7 @@ async def after_run_cleanup(driver: nd.Browser):
         shutil.rmtree(user_dir, ignore_errors=False)
         logging.debug(f"Removed Browser user data directory {user_dir}")
     except OSError as e:
-        logging.debug(
-            f"Failed to delete Browser user data directory: {e}"
-        )
+        logging.debug(f"Failed to delete Browser user data directory: {e}")
 
     # Remove Browser instance from created instances
     try:
@@ -622,17 +631,6 @@ async def after_run_cleanup(driver: nd.Browser):
         logging.debug("Removed Browser from registered instances")
     except Exception as e:
         logging.debug(f"Error when removing the Browser instance: {e}")
-
-
-def start_xvfb_display():
-    """Start virtual X display for headless mode on Linux"""
-    global XVFB_DISPLAY
-    if XVFB_DISPLAY is None:
-        from xvfbwrapper import Xvfb
-
-        XVFB_DISPLAY = Xvfb()
-        XVFB_DISPLAY.start()
-        logging.debug("VIRTUAL SCREEN STARTED")
 
 
 def object_to_dict(_object):
@@ -645,9 +643,11 @@ def object_to_dict(_object):
 def format_html(input_html):
     """Format HTML for logging"""
     # Parse the input HTML string
-    soup = BeautifulSoup(input_html, 'html.parser')
+    soup = BeautifulSoup(input_html, "html.parser")
 
     # Format the HTML with pretty print
     formatted_html = soup.prettify()
 
-    return f"\n==========================================\n{formatted_html}\n==========================================\n"
+    return (
+        f"\n==========================================\n{formatted_html}\n==========================================\n"
+    )

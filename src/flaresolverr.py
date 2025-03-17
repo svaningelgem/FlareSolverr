@@ -1,28 +1,28 @@
-import asyncio
 import json
 import logging
 import os
-import sys
-import inspect
 import pprint
+import sys
 
 import certifi
-from bottle import run, response, Bottle, request, ServerAdapter
+from bottle import Bottle, ServerAdapter, request, response, run
 
+import utils
 from bottle_plugins.error_plugin import error_plugin
 from bottle_plugins.logger_plugin import logger_plugin
-import utils
 from dtos import V1RequestBase
-from service_factory import create_service
 from method_utils import call_method
+from service_factory import create_service
+
 
 class JSONErrorBottle(Bottle):
     """
     Handle 404 errors with JSON responses
     """
+
     def default_error_handler(self, res):
         response.content_type = "application/json"
-        return json.dumps(dict(error=res.body, status_code=res.status_code))
+        return json.dumps({"error": res.body, "status_code": res.status_code})
 
 
 app = JSONErrorBottle()
@@ -30,13 +30,14 @@ app = JSONErrorBottle()
 # Create the appropriate service implementation
 service = create_service()
 
+
 @app.route("/")
 def index():
     """
     Show welcome message
     """
     logging.info("Handling request to /")
-    res = call_method(service, 'index_endpoint')
+    res = call_method(service, "index_endpoint")
     result = utils.object_to_dict(res)
     logging.debug(f"Index response: {pprint.pformat(result)}")
     return result
@@ -48,7 +49,7 @@ def health():
     Healthcheck endpoint
     """
     logging.debug("Handling request to /health")
-    res = call_method(service, 'health_endpoint')
+    res = call_method(service, "health_endpoint")
     return utils.object_to_dict(res)
 
 
@@ -68,7 +69,7 @@ def controller_v1():
     req = V1RequestBase(request_body)
 
     # Call service method and handle response
-    res = call_method(service, 'controller_v1_endpoint', req)
+    res = call_method(service, "controller_v1_endpoint", req)
 
     if res.__error_500__:
         response.status = 500
@@ -85,15 +86,12 @@ def controller_v1():
 
 if __name__ == "__main__":
     # Check Python version
-    if sys.version_info < (3, 9):
-        raise Exception(
-            "The Python version is less than 3.9, a version equal to or higher is required."
-        )
 
     # Fix for HEADLESS=false in Windows binary
     # https://stackoverflow.com/a/27694505
     if os.name == "nt":
         import multiprocessing
+
         multiprocessing.freeze_support()
 
     # Fix SSL certificates for compiled binaries
@@ -120,9 +118,7 @@ if __name__ == "__main__":
 
     # Disable warning traces from various libraries
     logging.getLogger("urllib3").setLevel(logging.ERROR)
-    logging.getLogger("selenium.webdriver.remote.remote_connection").setLevel(
-        logging.WARNING
-    )
+    logging.getLogger("selenium.webdriver.remote.remote_connection").setLevel(logging.WARNING)
     logging.getLogger("undetected_chromedriver").setLevel(logging.WARNING)
     # Nodriver is very verbose in debug
     logging.getLogger("nd.core.element").disabled = True
@@ -140,17 +136,13 @@ if __name__ == "__main__":
     driver_type = utils.get_driver_selection()
     logging.info(f"Using driver: {driver_type}")
 
-    logging.info(
-        "WARNING: YOU ARE RUNNING AN UNOFFICIAL EXPERIMENTAL BRANCH OF FLARESOLVER WHICH MAY CONTAIN BUGS."
-    )
-    logging.info(
-        "WARNING: IF YOU ENCOUNTER ANY, PLEASE REPORT THEM ON GITHUB AT THE FOLLOWING LINK:"
-    )
+    logging.info("WARNING: YOU ARE RUNNING AN UNOFFICIAL EXPERIMENTAL BRANCH OF FLARESOLVER WHICH MAY CONTAIN BUGS.")
+    logging.info("WARNING: IF YOU ENCOUNTER ANY, PLEASE REPORT THEM ON GITHUB AT THE FOLLOWING LINK:")
     logging.info("WARNING: https://github.com/FlareSolverr/FlareSolverr/pull/1163")
 
     # Test browser installation based on driver selection
     logging.info("Testing browser installation...")
-    call_method(service, 'test_browser_installation')
+    call_method(service, "test_browser_installation")
     logging.info("Browser installation test passed")
 
     # Install bottle plugins (error handling and logging)
@@ -164,6 +156,7 @@ if __name__ == "__main__":
     class WaitressServerPoll(ServerAdapter):
         def run(self, handler):
             from waitress import serve
+
             logging.info(f"Starting waitress server on {self.host}:{self.port}")
             serve(handler, host=self.host, port=self.port, asyncore_use_poll=True)
             logging.info("Server stopped")

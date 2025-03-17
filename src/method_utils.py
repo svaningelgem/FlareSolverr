@@ -1,9 +1,10 @@
 import asyncio
 import inspect
 import logging
-from typing import Any, Callable, TypeVar, cast
+from typing import Any, TypeVar
 
-T = TypeVar('T')
+T = TypeVar("T")
+
 
 def call_method(obj: Any, method_name: str, *args, **kwargs) -> Any:
     """
