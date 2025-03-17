@@ -1,8 +1,11 @@
+import asyncio
+import inspect
 import json
 import os
 import pprint
 import sys
 import time
+from typing import Any
 
 import certifi
 from bottle import Bottle, ServerAdapter, request, response, run
@@ -12,8 +15,34 @@ import utils
 from bottle_plugins.error_plugin import error_plugin
 from bottle_plugins.logger_plugin import logger_plugin
 from dtos import V1RequestBase
-from method_utils import call_method
-from service_factory import create_service
+import service_factory
+
+
+
+def call_service(method_name: str, *args, **kwargs) -> Any:
+    """
+    Call a method that might be synchronous or asynchronous.
+
+    Args:
+        method_name: Name of the method to call
+        *args: Positional arguments to pass to the method
+        **kwargs: Keyword arguments to pass to the method
+
+    Returns:
+        The return value of the method
+    """
+    service = service_factory.get()
+    if not hasattr(service, method_name):
+        raise AttributeError(f"Object has no method named '{method_name}'")
+
+    method = getattr(service, method_name)
+
+    if inspect.iscoroutinefunction(method):
+        logger.debug(f"Calling async method: {method_name}")
+        return asyncio.run(method(*args, **kwargs))
+    else:
+        logger.debug(f"Calling sync method: {method_name}")
+        return method(*args, **kwargs)
 
 
 # Configure loguru
@@ -44,9 +73,6 @@ class JSONErrorBottle(Bottle):
 
 app = JSONErrorBottle()
 
-# Create the appropriate service implementation
-service = create_service()
-
 
 @app.route("/")
 def index():
@@ -54,7 +80,7 @@ def index():
     Show welcome message
     """
     logger.info("Handling request to /")
-    res = call_method(service, "index_endpoint")
+    res = call_service("index_endpoint")
     result = utils.object_to_dict(res)
     logger.debug(f"Index response: {pprint.pformat(result)}")
     return result
@@ -66,7 +92,7 @@ def health():
     Healthcheck endpoint
     """
     logger.debug("Handling request to /health")
-    res = call_method(service, "health_endpoint")
+    res = call_service("health_endpoint")
     return utils.object_to_dict(res)
 
 
@@ -90,7 +116,7 @@ def controller_v1():
     req = V1RequestBase(request_body)
 
     # Call service method and handle response
-    res = call_method(service, "controller_v1_endpoint", req)
+    res = call_service("controller_v1_endpoint", req)
 
     if res.__error_500__:
         response.status = 500
@@ -147,7 +173,7 @@ if __name__ == "__main__":
 
     # Test browser installation based on driver selection
     logger.info("Testing browser installation...")
-    call_method(service, "test_browser_installation")
+    call_service("test_browser_installation")
     logger.info("Browser installation test passed")
 
     # Install bottle plugins (error handling and logging)

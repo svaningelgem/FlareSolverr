@@ -1,3 +1,4 @@
+from functools import lru_cache
 from typing import TypeVar
 
 from loguru import logger
@@ -8,7 +9,8 @@ from abstract_base import BaseService
 T = TypeVar("T", bound=BaseService)
 
 
-def create_service() -> BaseService:
+@lru_cache(1)
+def get() -> BaseService:
     """Create the appropriate service based on configuration"""
     driver_selection = utils.get_driver_selection()
 
