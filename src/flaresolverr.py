@@ -15,6 +15,14 @@ import flaresolverr_service
 import flaresolverr_service_nd
 import utils
 
+import asyncio
+import inspect
+from bottle import run, response, Bottle, request, ServerAdapter
+
+from service_factory import create_service
+import utils
+from dtos import V1RequestBase
+
 
 class JSONErrorBottle(Bottle):
     """
@@ -27,6 +35,7 @@ class JSONErrorBottle(Bottle):
 
 
 app = JSONErrorBottle()
+service = create_service()
 
 
 @app.route("/")
@@ -48,20 +57,21 @@ def health():
     return utils.object_to_dict(res)
 
 
+
 @app.post("/v1")
 def controller_v1():
-    """
-    Controller v1
-    """
+    """Controller v1"""
     req = V1RequestBase(request.json)
-    if utils.get_driver_selection() == "nodriver":
-        res = asyncio.run(flaresolverr_service_nd.controller_v1_endpoint_nd(req))
+
+    # Check if service method is async
+    if inspect.iscoroutinefunction(service.controller_v1_endpoint):
+        res = asyncio.run(service.controller_v1_endpoint(req))
     else:
-        res = flaresolverr_service.controller_v1_endpoint(req)
+        res = service.controller_v1_endpoint(req)
+
     if res.__error_500__:
         response.status = 500
     return utils.object_to_dict(res)
-
 
 if __name__ == "__main__":
     # check python version
