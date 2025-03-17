@@ -5,9 +5,10 @@ import sys
 import time
 from datetime import datetime, timedelta
 from typing import Optional, Tuple, cast
+from urllib.parse import unquote, urlparse
 from uuid import uuid1
 
-from nodriver import Browser
+from nodriver import Browser, Tab
 
 import utils
 from abstract_base import BaseService, BaseSession, BaseSessionsStorage
@@ -18,7 +19,7 @@ from dtos import (
     V1ResponseBase,
     ChallengeResolutionT,
     IndexResponse,
-    HealthResponse
+    HealthResponse, ChallengeResolutionResultT
 )
 
 # Constants from flaresolverr_service_nd.py
@@ -75,13 +76,14 @@ class AsyncSessionsStorage(BaseSessionsStorage[Browser]):
             await self.destroy(session_id)
 
         if self.exists(session_id):
-            return self.sessions[session_id], False
+            # Need to cast the session to the correct type
+            return cast(Tuple[AsyncSession, bool], (self.sessions[session_id], False))
 
         driver = await utils.get_webdriver_nd(proxy)
         session = AsyncSession(session_id, driver, datetime.now())
         self.sessions[session_id] = session
 
-        return cast(Tuple[AsyncSession, bool], (session, True))
+        return session, True
 
     async def destroy(self, session_id: str) -> bool:
         if not self.exists(session_id):
@@ -98,7 +100,7 @@ class AsyncSessionsStorage(BaseSessionsStorage[Browser]):
             logging.debug(f'Session lifetime expired, recreating (session_id={session_id})')
             session, fresh = await self.create(session_id, force_new=True)
 
-        return cast(Tuple[AsyncSession, bool], (session, fresh))
+        return session, fresh
 
 class AsyncService(BaseService[Browser]):
     """Asynchronous service implementation"""
@@ -106,6 +108,82 @@ class AsyncService(BaseService[Browser]):
     def __init__(self):
         super().__init__()
         self.sessions_storage = AsyncSessionsStorage()
+
+    async def get_status_code(self, event):
+        """Monitor network request status code"""
+        global STATUS_CODE
+        STATUS_CODE = event
+
+    async def click_verify_nd(self, tab: Tab):
+        """Try to click on Cloudflare verification elements for nodriver"""
+        try:
+            logging.debug("Checking if cloudflare captcha is present on page...")
+            await tab.wait(2)
+            await tab
+            cf_element = await tab.find(text="cf-chl-widget-", timeout=SHORT_TIMEOUT)
+
+            if cf_element:
+                logging.debug("Cloudflare captcha found!")
+
+                # update targets before looking for the iframe
+                # nodriver list it in LOG_LEVEL debug but not in info
+                await tab.browser.update_targets()
+                # get the iframe target
+                cf_tab = next(
+                    (
+                        target
+                        for target in tab.browser.targets
+                        if "challenges.cloudflare.com" in target.url
+                    ),
+                    None,
+                )
+                if cf_tab is None:
+                    raise ValueError("Captcha iframe not found!")
+
+                # Fix iframe being denied access by websocket
+                cf_tab.websocket_url = cf_tab.websocket_url.replace("iframe", "page")
+
+                logging.debug("Found captcha iframe!")
+
+                # get checkbox from iframe
+                cf_checkbox = await cf_tab.find(text="checkbox", timeout=SHORT_TIMEOUT)
+
+                await cf_checkbox.mouse_click()
+                logging.debug("Checkbox element clicked!")
+        except Exception as e:
+            logging.debug(f"Cloudflare element not found on the page - {str(e)}")
+
+        await asyncio.sleep(2)
+
+    async def _post_request_nd(self, req: V1RequestBase) -> str:
+        """Create HTML content for POST request submission"""
+        post_form = f'<form id="hackForm" action="{req.url}" method="POST">'
+        query_string = req.postData if req.postData[0] != "?" else req.postData[1:]
+        pairs = query_string.split("&")
+        for pair in pairs:
+            parts = pair.split("=")
+            try:
+                name = unquote(parts[0])
+            except Exception:
+                name = parts[0]
+            if name == "submit":
+                continue
+            try:
+                value = unquote(parts[1])
+            except Exception:
+                value = parts[1]
+            post_form += f'<input type="text" name="{name}" value="{value}"><br>'
+        post_form += "</form>"
+        html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <body>
+                {post_form}
+                <script>document.getElementById('hackForm').submit();</script>
+            </body>
+            </html>"""
+
+        return html_content
 
     async def test_browser_installation(self):
         logging.info("Testing web browser installation...")
@@ -319,10 +397,201 @@ class AsyncService(BaseService[Browser]):
                 logging.debug("A used instance of chromium has been destroyed")
 
     async def _evil_logic(self, req: V1RequestBase, driver: Browser, method: str) -> ChallengeResolutionT:
-        # Implementation would be copied from flaresolverr_service_nd.py
-        # This is the core challenge solving logic with all browser manipulation
-        # Since it's extensive, I'm indicating it would be directly copied from the original
+        """Core logic for solving Cloudflare challenges with nodriver"""
+        res = ChallengeResolutionT({})
+        res.status = STATUS_OK
+        res.message = ""
 
-        # Placeholder to fix type errors
-        from dtos import ChallengeResolutionT, STATUS_OK
-        return ChallengeResolutionT({"status": STATUS_OK, "message": "", "result": None})
+        # navigate to the page
+        logging.debug(f"Navigating to... {req.url}")
+        if method == "POST":
+            post_content = await self._post_request_nd(req)
+            tab = await driver.get("data:text/html;charset=utf-8," + post_content)
+        else:
+            tab = await driver.get(req.url)
+
+        # Insert cookies in Browser if set
+        if req.cookies is not None and len(req.cookies) > 0:
+            await tab.wait(1)
+            await tab
+            logging.debug(f"Setting cookies...")
+
+            # Get cleaned domain
+            domain = (urlparse(req.url).netloc).split(".")
+            domain = ".".join(domain[-2:])
+
+            # Delete all cookies
+            logging.debug("Removing all Browser cookies...")
+            await driver.cookies.clear()
+
+            cookies = []
+            for cookie in req.cookies:
+                if domain not in cookie["domain"]:
+                    logging.debug(f"Skipping cookie from domain {cookie['domain']}")
+                    continue
+                logging.debug(
+                    f"Appending cookie '{cookie['name']}' for '{cookie['domain']}'..."
+                )
+                cookies.append(
+                    utils.nd.cdp.network.CookieParam(
+                        name=cookie["name"],
+                        value=cookie["value"],
+                        path=cookie["path"],
+                        domain=cookie["domain"],
+                    )
+                )
+
+            await driver.cookies.set_all(cookies)
+
+            # reload the page
+            if method == "POST":
+                tab = await driver.get(post_content)
+            else:
+                logging.debug("Reloading tab...")
+                await tab.reload()
+
+        # wait for the page and make sure it catches the load event
+        await tab.wait(1)
+        await tab
+
+        # get current page nodes
+        doc = await tab.send(utils.nd.cdp.dom.get_document(-1, True))
+
+        if utils.get_config_log_html():
+            logging.debug(f"Response HTML:\n{utils.format_html(await tab.get_content(_node=doc))}")
+        page_title = tab.target.title
+
+        # find access denied titles
+        for title in ACCESS_DENIED_TITLES:
+            if title == page_title:
+                raise Exception(
+                    "Cloudflare has blocked this request. "
+                    "Probably your IP is banned for this site, check in your web browser."
+                )
+        # find access denied selectors
+        for selector in ACCESS_DENIED_SELECTORS:
+            found_elements = await tab.query_selector(selector=selector, _node=doc)
+            if found_elements is not None:
+                raise Exception(
+                    "Cloudflare has blocked this request. "
+                    "Probably your IP is banned for this site, check in your web browser."
+                )
+
+        # find challenge by title
+        challenge_found = False
+        for title in CHALLENGE_TITLES:
+            if title.lower() == page_title.lower():
+                challenge_found = True
+                logging.info("Challenge detected. Title found: " + page_title)
+                break
+        if not challenge_found:
+            # find challenge by selectors
+            for selector in CHALLENGE_SELECTORS:
+                found_elements = await tab.query_selector(selector=selector, _node=doc)
+                if found_elements is not None:
+                    challenge_found = True
+                    logging.info("Challenge detected. Selector found: " + selector)
+                    break
+
+        attempt = 0
+        if challenge_found:
+            while True:
+                try:
+                    attempt = attempt + 1
+                    await tab.wait(1)
+
+                    # wait until the title changes
+                    for title in CHALLENGE_TITLES:
+                        logging.debug(f"Waiting for title (attempt {attempt}): {title} [Current title: {tab.target.title}]")
+                        if tab.target.title != title:
+                            logging.debug(" * nope")
+                            continue
+                        start_time = time.time()
+                        while True:
+                            current_title = tab.target.title
+                            logging.debug(f" * current title: {current_title}")
+                            if current_title not in CHALLENGE_TITLES:
+                                logging.debug(" * nope2")
+                                break
+                            if time.time() - start_time > SHORT_TIMEOUT:
+                                logging.debug(" * timeout")
+                                raise TimeoutError
+                            logging.debug(" * still same title")
+                            await tab.wait(0.1)
+
+                    # then wait until all the selectors disappear
+                    logging.debug("Waiting for CHALLENGE_SELECTORS")
+                    for selector in CHALLENGE_SELECTORS:
+                        logging.debug("Waiting for tab")
+                        await tab
+                        logging.debug(f"Waiting for selector (attempt {attempt}): {selector}")
+                        if (
+                                await tab.query_selector(selector=selector, _node=doc)
+                                is not None
+                        ):
+                            logging.debug(" * found selector")
+                            start_time = time.time()
+                            while True:
+                                element = await tab.query_selector(
+                                    selector=selector, _node=doc
+                                )
+                                logging.debug(" * finised querying (again)")
+                                if not element:
+                                    logging.debug(" * ok next")
+                                    break
+                                if time.time() - start_time > SHORT_TIMEOUT:
+                                    logging.debug(" * timeout reached")
+                                    raise TimeoutError
+                                logging.debug(" * deleting element")
+                                del element
+                                logging.debug(" * sleeping")
+                                await asyncio.sleep(0.1)
+
+                        logging.debug("Next selector")
+
+                    logging.debug("All elements gone")
+                    # all elements not found
+                    break
+
+                except TimeoutError:
+                    logging.debug("Timeout waiting for selector")
+
+                    await self.click_verify_nd(tab)
+
+            # waits until cloudflare redirection ends
+            logging.debug("Waiting for redirect")
+            try:
+                await tab
+            except Exception:
+                logging.debug("Timeout waiting for redirect")
+
+            logging.info("Challenge solved!")
+            res.message = "Challenge solved!"
+        else:
+            logging.info("Challenge not detected!")
+            res.message = "Challenge not detected!"
+
+        challenge_res = ChallengeResolutionResultT({})
+        challenge_res.url = tab.target.url
+        challenge_res.status = STATUS_CODE
+        logging.debug("requesting cookies from the driver")
+        challenge_res.cookies = await driver.cookies.get_all(requests_cookie_format=True)
+        logging.debug("requesting user agent from the driver")
+        challenge_res.userAgent = await utils.get_user_agent_nd(driver)
+
+        if not req.returnOnlyCookies:
+            challenge_res.headers = {}  # nodriver should support this in the future
+            logging.debug("requesting html content from the tab")
+            challenge_res.response = await tab.get_content(_node=doc)
+
+        # Close websocket connection to reuse the driver tab
+        if req.session:
+            logging.debug("tab.aclose()")
+            await tab.aclose()
+        else:
+            logging.debug("tab.close()")
+            await tab.close()
+        logging.debug("Tab was closed")
+
+        res.result = challenge_res
+        return res

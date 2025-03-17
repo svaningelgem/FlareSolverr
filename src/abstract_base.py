@@ -48,8 +48,10 @@ class BaseSessionsStorage(ABC, Generic[DriverT]):
 class BaseService(ABC, Generic[DriverT]):
     """Abstract base class for FlareSolver service implementations"""
 
+    sessions_storage: "BaseSessionsStorage[DriverT]"
+
     def __init__(self):
-        self.sessions_storage: BaseSessionsStorage[DriverT] = None
+        pass
 
     @abstractmethod
     def test_browser_installation(self) -> Union[None, Coroutine[Any, Any, None]]:

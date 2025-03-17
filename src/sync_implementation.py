@@ -5,10 +5,18 @@ import time
 from datetime import datetime, timedelta
 from functools import wraps
 from typing import Optional, Tuple, Any, Callable, TypeVar, cast
+from urllib.parse import unquote
 from uuid import uuid1
 
 from func_timeout import func_timeout, FunctionTimedOut
 from selenium.webdriver.chrome.webdriver import WebDriver
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.wait import WebDriverWait
+from selenium.webdriver.support.expected_conditions import (
+    presence_of_element_located, staleness_of, title_is
+)
+from selenium.common import TimeoutException
+from selenium.webdriver.common.action_chains import ActionChains
 
 import utils
 from abstract_base import BaseService, BaseSession, BaseSessionsStorage
@@ -68,13 +76,14 @@ class SyncSessionsStorage(BaseSessionsStorage[WebDriver]):
             self.destroy(session_id)
 
         if self.exists(session_id):
-            return self.sessions[session_id], False
+            # Need to cast the session to the correct type
+            return cast(Tuple[SyncSession, bool], (self.sessions[session_id], False))
 
         driver = utils.get_webdriver_uc(proxy)
         session = SyncSession(session_id, driver, datetime.now())
         self.sessions[session_id] = session
 
-        return cast(Tuple[SyncSession, bool], (session, True))
+        return session, True
 
     def destroy(self, session_id: str) -> bool:
         if not self.exists(session_id):
@@ -93,7 +102,7 @@ class SyncSessionsStorage(BaseSessionsStorage[WebDriver]):
             logging.debug(f'Session lifetime expired, recreating (session_id={session_id})')
             session, fresh = self.create(session_id, force_new=True)
 
-        return cast(Tuple[SyncSession, bool], (session, fresh))
+        return session, fresh
 
 class SyncService(BaseService[WebDriver]):
     """Synchronous service implementation"""
@@ -101,6 +110,129 @@ class SyncService(BaseService[WebDriver]):
     def __init__(self):
         super().__init__()
         self.sessions_storage = SyncSessionsStorage()
+
+    def get_shadowed_iframe(self, driver: WebDriver, css_selector: str):
+        """Get Shadow DOM iframe element"""
+        logging.debug("Getting ShadowRoot by selector: %s", css_selector)
+        shadow_element = driver.execute_script("""
+            return (arguments[0] && document.querySelector(arguments[0])?.shadowRoot?.firstChild) || null;
+        """, css_selector)
+        if shadow_element:
+            logging.debug("iframe found")
+        else:
+            logging.debug("iframe not found")
+        return shadow_element
+
+    def click_verify(self, driver: WebDriver):
+        """Try to click on Cloudflare verification elements"""
+        try:
+            logging.debug("Try to find the Cloudflare verify checkbox...")
+            iframe = self.get_shadowed_iframe(driver, "div.cf-turnstile-wrapper")
+            if iframe:
+                logging.debug(f"iframe found ({type(iframe)})")
+                logging.debug("iframe source: " + iframe.page_source)
+            else:
+                logging.debug("iframe not found")
+
+            driver.switch_to.frame(iframe)
+            checkbox = driver.find_element(
+                by=By.XPATH,
+                value='//label/input',
+            )
+            if checkbox:
+                actions = ActionChains(driver)
+                actions.move_to_element_with_offset(checkbox, 5, 7)
+                actions.click(checkbox)
+                actions.perform()
+                logging.debug("Cloudflare verify checkbox found and clicked!")
+        except Exception as e:
+            logging.debug(f"Cloudflare verify checkbox not found on the page. {repr(e)} - {e}")
+        finally:
+            driver.switch_to.default_content()
+
+        try:
+            logging.debug("Try to find the Cloudflare 'Verify you are human' button...")
+            button = driver.find_element(
+                by=By.XPATH,
+                value="//input[@type='button' and @value='Verify you are human']",
+            )
+            if button:
+                actions = ActionChains(driver)
+                actions.move_to_element_with_offset(button, 5, 7)
+                actions.click(button)
+                actions.perform()
+                logging.debug("The Cloudflare 'Verify you are human' button found and clicked!")
+        except Exception:
+            logging.debug("The Cloudflare 'Verify you are human' button not found on the page.")
+
+        time.sleep(2)
+
+    def get_correct_window(self, driver: WebDriver) -> WebDriver:
+        """Get the correct window if multiple are open"""
+        if len(driver.window_handles) > 1:
+            for window_handle in driver.window_handles:
+                driver.switch_to.window(window_handle)
+                current_url = driver.current_url
+                if not current_url.startswith("devtools://devtools"):
+                    return driver
+        return driver
+
+    def switch_to_new_tab(self, driver: WebDriver, url: str) -> None:
+        """Open URL in a new tab and close the original"""
+        logging.debug("Opening new tab...")
+        driver.execute_script(f"window.open('{url}', 'new tab')")
+        time.sleep(4)
+        logging.debug("Closing original tab...")
+        driver.close()
+
+    def access_page(self, driver: WebDriver, url: str) -> None:
+        """Access a page with Cloudflare bypass technique"""
+        driver.get(url)
+        driver.start_session()
+        driver.start_session()  # required to bypass Cloudflare
+
+    def _post_request(self, req: V1RequestBase, driver: WebDriver):
+        """Handle POST requests by creating a form and submitting it"""
+        post_form = f'<form id="hackForm" action="{req.url}" method="POST">'
+        query_string = req.postData if req.postData[0] != '?' else req.postData[1:]
+        pairs = query_string.split('&')
+        for pair in pairs:
+            parts = pair.split('=')
+            try:
+                name = unquote(parts[0])
+            except Exception:
+                name = parts[0]
+            if name == 'submit':
+                continue
+            try:
+                value = unquote(parts[1])
+            except Exception:
+                value = parts[1]
+            post_form += f'<input type="text" name="{name}" value="{value}"><br>'
+        post_form += '</form>'
+        html_content = f"""
+            <!DOCTYPE html>
+            <html>
+            <body>
+                {post_form}
+                <script>document.getElementById('hackForm').submit();</script>
+            </body>
+            </html>"""
+        driver.get("data:text/html;charset=utf-8," + html_content)
+        driver.start_session()
+        driver.start_session()  # required to bypass Cloudflare
+
+    def request_page(self, driver: WebDriver, req: V1RequestBase, method: str) -> None:
+        """Request a page using either GET or POST method"""
+        if method == 'POST':
+            self._post_request(req, driver)
+        else:
+            self.access_page(driver, req.url)
+
+        if utils.get_config_log_html():
+            logging.debug(f"Request: {req.url}")
+            logging.debug(f"Response HTML: {utils.format_html(driver.page_source)}")
+
 
     def test_browser_installation(self):
         logging.info("Testing web browser installation...")
@@ -310,10 +442,113 @@ class SyncService(BaseService[WebDriver]):
             logging.debug("Driver init exception: %s", repr(e))
 
     def _evil_logic(self, req: V1RequestBase, driver: WebDriver, method: str) -> ChallengeResolutionT:
-        # Implementation would be copied from flaresolverr_service.py
-        # This is the core challenge solving logic with all browser manipulation
-        # Since it's extensive, I'm indicating it would be directly copied from the original
+        """Core logic for solving Cloudflare challenges"""
+        res = ChallengeResolutionT({})
+        res.status = STATUS_OK
+        res.message = ""
 
-        # Placeholder to fix type errors
-        from dtos import ChallengeResolutionT, STATUS_OK
-        return ChallengeResolutionT({"status": STATUS_OK, "message": "", "result": None})
+        # navigate to the page
+        logging.debug(f'Navigating to... {req.url}')
+        self.request_page(driver, req, method)
+        driver = self.get_correct_window(driver)
+
+        # set cookies if required
+        if req.cookies is not None and len(req.cookies) > 0:
+            logging.debug(f'Setting cookies...')
+            for cookie in req.cookies:
+                driver.delete_cookie(cookie['name'])
+                driver.add_cookie(cookie)
+            # reload the page
+            self.request_page(driver, req, method)
+            driver = self.get_correct_window(driver)
+
+        # wait for the page
+        html_element = driver.find_element(By.TAG_NAME, "html")
+        page_title = driver.title
+
+        # find access denied titles
+        for title in ACCESS_DENIED_TITLES:
+            if title == page_title:
+                raise Exception('Cloudflare has blocked this request. '
+                                'Probably your IP is banned for this site, check in your web browser.')
+        # find access denied selectors
+        for selector in ACCESS_DENIED_SELECTORS:
+            found_elements = driver.find_elements(By.CSS_SELECTOR, selector)
+            if len(found_elements) > 0:
+                raise Exception('Cloudflare has blocked this request. '
+                                'Probably your IP is banned for this site, check in your web browser.')
+
+        # find challenge by title
+        challenge_found = False
+        for title in CHALLENGE_TITLES:
+            if title.lower() == page_title.lower():
+                challenge_found = True
+                logging.info("Challenge detected. Title found: " + page_title)
+                break
+        if not challenge_found:
+            # find challenge by selectors
+            for selector in CHALLENGE_SELECTORS:
+                found_elements = driver.find_elements(By.CSS_SELECTOR, selector)
+                if len(found_elements) > 0:
+                    challenge_found = True
+                    logging.info("Challenge detected. Selector found: " + selector)
+                    break
+
+        attempt = 0
+        if challenge_found:
+            while True:
+                try:
+                    attempt = attempt + 1
+
+                    if attempt == 4:
+                        self.switch_to_new_tab(driver, req.url)
+                        driver = self.get_correct_window(driver)
+                        time.sleep(4)
+
+                    # wait until the title changes
+                    for title in CHALLENGE_TITLES:
+                        logging.debug("Waiting for title (attempt " + str(attempt) + "): " + title)
+                        WebDriverWait(driver, SHORT_TIMEOUT).until_not(title_is(title))
+
+                    # then wait until all the selectors disappear
+                    for selector in CHALLENGE_SELECTORS:
+                        logging.debug("Waiting for selector (attempt " + str(attempt) + "): " + selector)
+                        WebDriverWait(driver, SHORT_TIMEOUT).until_not(
+                            presence_of_element_located((By.CSS_SELECTOR, selector)))
+
+                    # all elements not found
+                    break
+
+                except TimeoutException:
+                    logging.debug("Timeout waiting for selector")
+
+                    self.click_verify(driver)
+
+                    # update the html (cloudflare reloads the page every 5 s)
+                    html_element = driver.find_element(By.TAG_NAME, "html")
+
+            # waits until cloudflare redirection ends
+            logging.debug("Waiting for redirect")
+            try:
+                WebDriverWait(driver, SHORT_TIMEOUT).until(staleness_of(html_element))
+            except Exception:
+                logging.debug("Timeout waiting for redirect")
+
+            logging.info("Challenge solved!")
+            res.message = "Challenge solved!"
+        else:
+            logging.info("Challenge not detected!")
+            res.message = "Challenge not detected!"
+
+        challenge_res = ChallengeResolutionResultT({})
+        challenge_res.url = driver.current_url
+        challenge_res.status = 200  # todo: fix, selenium not provides this info
+        challenge_res.cookies = driver.get_cookies()
+        challenge_res.userAgent = utils.get_user_agent_uc(driver)
+
+        if not req.returnOnlyCookies:
+            challenge_res.headers = {}  # todo: fix, selenium not provides this info
+            challenge_res.response = driver.page_source
+
+        res.result = challenge_res
+        return res
