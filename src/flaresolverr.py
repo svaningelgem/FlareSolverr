@@ -1,8 +1,9 @@
+import asyncio
 import json
 import logging
 import os
 import sys
-import asyncio
+import inspect
 
 import certifi
 from bottle import run, response, Bottle, request, ServerAdapter
@@ -11,18 +12,8 @@ from bottle_plugins.error_plugin import error_plugin
 from bottle_plugins.logger_plugin import logger_plugin
 from bottle_plugins import prometheus_plugin
 from dtos import V1RequestBase
-import flaresolverr_service
-import flaresolverr_service_nd
 import utils
-
-import asyncio
-import inspect
-from bottle import run, response, Bottle, request, ServerAdapter
-
-from service_factory import create_service
-import utils
-from dtos import V1RequestBase
-
+from service_factory import create_service, is_async_method
 
 class JSONErrorBottle(Bottle):
     """
@@ -35,15 +26,19 @@ class JSONErrorBottle(Bottle):
 
 
 app = JSONErrorBottle()
-service = create_service()
 
+# Create the appropriate service implementation
+service = create_service()
 
 @app.route("/")
 def index():
     """
     Show welcome message
     """
-    res = flaresolverr_service.index_endpoint()
+    if is_async_method(service, 'index_endpoint'):
+        res = asyncio.run(service.index_endpoint())
+    else:
+        res = service.index_endpoint()
     return utils.object_to_dict(res)
 
 
@@ -53,18 +48,21 @@ def health():
     Healthcheck endpoint.
     This endpoint is special because it doesn't print traces
     """
-    res = flaresolverr_service.health_endpoint()
+    if is_async_method(service, 'health_endpoint'):
+        res = asyncio.run(service.health_endpoint())
+    else:
+        res = service.health_endpoint()
     return utils.object_to_dict(res)
-
 
 
 @app.post("/v1")
 def controller_v1():
-    """Controller v1"""
+    """
+    Controller v1
+    """
     req = V1RequestBase(request.json)
 
-    # Check if service method is async
-    if inspect.iscoroutinefunction(service.controller_v1_endpoint):
+    if is_async_method(service, 'controller_v1_endpoint'):
         res = asyncio.run(service.controller_v1_endpoint(req))
     else:
         res = service.controller_v1_endpoint(req)
@@ -72,6 +70,7 @@ def controller_v1():
     if res.__error_500__:
         response.status = 500
     return utils.object_to_dict(res)
+
 
 if __name__ == "__main__":
     # check python version
@@ -136,11 +135,11 @@ if __name__ == "__main__":
     # Get current OS for global variable
     utils.get_current_platform()
 
-    # test browser installation for undetected-chromedriver or start loop for nodriver
-    if utils.get_driver_selection() == "nodriver":
-        asyncio.run(flaresolverr_service_nd.test_browser_installation_nd())
+    # test browser installation based on driver selection
+    if is_async_method(service, 'test_browser_installation'):
+        asyncio.run(service.test_browser_installation())
     else:
-        flaresolverr_service.test_browser_installation_uc()
+        service.test_browser_installation()
 
     # start bootle plugins
     # plugin order is important

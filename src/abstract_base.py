@@ -1,10 +1,9 @@
-# abstract_base.py
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from datetime import datetime, timedelta
-from typing import Any, Optional, Tuple, List, TypeVar, Generic
+from typing import Any, Optional, Tuple, List, TypeVar, Generic, Dict, Union
 
-from dtos import V1RequestBase, V1ResponseBase, ChallengeResolutionT
+from dtos import V1RequestBase, V1ResponseBase, ChallengeResolutionT, HealthResponse, IndexResponse
 
 DriverT = TypeVar('DriverT')  # Type variable for driver implementations
 
@@ -22,7 +21,7 @@ class BaseSessionsStorage(ABC, Generic[DriverT]):
     """Abstract base class for session management"""
 
     def __init__(self):
-        self.sessions = {}
+        self.sessions: Dict[str, BaseSession[DriverT]] = {}
 
     def exists(self, session_id: str) -> bool:
         return session_id in self.sessions
@@ -46,17 +45,60 @@ class BaseSessionsStorage(ABC, Generic[DriverT]):
         """Get a session, creating it if needed or expired"""
         pass
 
-class BaseService(ABC):
+class BaseService(ABC, Generic[DriverT]):
     """Abstract base class for FlareSolver service implementations"""
 
+    def __init__(self):
+        self.sessions_storage: BaseSessionsStorage[DriverT]
+
     @abstractmethod
-    def test_browser_installation(self):
+    def test_browser_installation(self) -> None:
         """Test if browser is properly installed"""
+        pass
+
+    @abstractmethod
+    def index_endpoint(self) -> IndexResponse:
+        """Handle index endpoint"""
+        pass
+
+    @abstractmethod
+    def health_endpoint(self) -> HealthResponse:
+        """Handle health endpoint"""
         pass
 
     @abstractmethod
     def controller_v1_endpoint(self, req: V1RequestBase) -> V1ResponseBase:
         """Handle controller V1 endpoint"""
+        pass
+
+    @abstractmethod
+    def _controller_v1_handler(self, req: V1RequestBase) -> V1ResponseBase:
+        """Process controller V1 request"""
+        pass
+
+    @abstractmethod
+    def _cmd_request_get(self, req: V1RequestBase) -> V1ResponseBase:
+        """Handle request.get command"""
+        pass
+
+    @abstractmethod
+    def _cmd_request_post(self, req: V1RequestBase) -> V1ResponseBase:
+        """Handle request.post command"""
+        pass
+
+    @abstractmethod
+    def _cmd_sessions_create(self, req: V1RequestBase) -> V1ResponseBase:
+        """Handle sessions.create command"""
+        pass
+
+    @abstractmethod
+    def _cmd_sessions_list(self, req: V1RequestBase) -> V1ResponseBase:
+        """Handle sessions.list command"""
+        pass
+
+    @abstractmethod
+    def _cmd_sessions_destroy(self, req: V1RequestBase) -> V1ResponseBase:
+        """Handle sessions.destroy command"""
         pass
 
     @abstractmethod
