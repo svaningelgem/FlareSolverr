@@ -11,11 +11,11 @@ import certifi
 from bottle import Bottle, ServerAdapter, request, response, run
 from loguru import logger
 
+import service_factory
 import utils
 from bottle_plugins.error_plugin import error_plugin
 from bottle_plugins.logger_plugin import logger_plugin
 from dtos import Request
-import service_factory
 from src.dtos import STATUS_ERROR
 
 
@@ -108,7 +108,7 @@ def controller_v1():
     try:
         # Deep log request details
         start_time = time.time()
-        request_id = f"req-{int(start_time * 1000) % 10000:04d}"
+        f"req-{int(start_time * 1000) % 10000:04d}"
 
         logger.info("Handling POST request to /v1")
         request_body = request.json or {}

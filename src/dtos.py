@@ -40,8 +40,7 @@ class Request:
     headers: dict = field(default_factory=dict)
 
     def __post_init__(self):
-        self.headers = {k.lower() : v for k, v in self.headers.items()}
-
+        self.headers = {k.lower(): v for k, v in self.headers.items()}
 
 
 @dataclass

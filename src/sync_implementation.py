@@ -18,7 +18,6 @@ from selenium.webdriver.support.wait import WebDriverWait
 import utils
 from abstract_base import BaseService, BaseSession, BaseSessionsStorage
 from dtos import (
-    STATUS_ERROR,
     STATUS_OK,
     ChallengeResolutionResultT,
     ChallengeResolutionT,
@@ -269,9 +268,9 @@ class SyncService(BaseService[WebDriver]):
 
     def index_endpoint(self) -> IndexResponse:
         return IndexResponse(
-        msg = "FlareSolverr is ready!",
-        version = utils.get_flaresolverr_version(),
-        user_agent = utils.get_user_agent_uc(),
+            msg="FlareSolverr is ready!",
+            version=utils.get_flaresolverr_version(),
+            user_agent=utils.get_user_agent_uc(),
         )
 
     def health_endpoint(self) -> HealthResponse:

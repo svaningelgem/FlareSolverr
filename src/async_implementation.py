@@ -211,9 +211,9 @@ class AsyncService(BaseService[Browser]):
 
     async def index_endpoint(self) -> IndexResponse:
         return IndexResponse(
-        msg = "FlareSolverr is ready!",
-        version = utils.get_flaresolverr_version(),
-        user_agent = await utils.get_user_agent_nd(),
+            msg="FlareSolverr is ready!",
+            version=utils.get_flaresolverr_version(),
+            user_agent=await utils.get_user_agent_nd(),
         )
 
     async def health_endpoint(self) -> HealthResponse:
@@ -221,7 +221,7 @@ class AsyncService(BaseService[Browser]):
 
     async def controller_v1_endpoint(self, req: Request) -> Response:
         start_ts = int(time.time() * 1000)
-        logger.info(f"Incoming request => POST /v1 body")
+        logger.info("Incoming request => POST /v1 body")
         res = await self._controller_v1_handler(req)
 
         res.startTimestamp = start_ts
@@ -264,18 +264,18 @@ class AsyncService(BaseService[Browser]):
 
         challenge_res = await self._resolve_challenge(req, "GET")
         return Response(
-        status = challenge_res.status,
-        message = challenge_res.message,
-        solution = challenge_res.result,
+            status=challenge_res.status,
+            message=challenge_res.message,
+            solution=challenge_res.result,
         )
 
     async def _cmd_request_post(self, req: Request) -> Response:
         # do some validations
         challenge_res = await self._resolve_challenge(req, "POST")
         return Response(
-        status = challenge_res.status,
-        message = challenge_res.message,
-        solution = challenge_res.result,
+            status=challenge_res.status,
+            message=challenge_res.message,
+            solution=challenge_res.result,
         )
 
     async def _cmd_sessions_create(self, req: Request) -> Response:
@@ -286,21 +286,21 @@ class AsyncService(BaseService[Browser]):
 
         if not fresh:
             return Response(
-                    status= STATUS_OK,
-                    message= "Session already exists.",
-                    session= session_id,
+                status=STATUS_OK,
+                message="Session already exists.",
+                session=session_id,
             )
 
         return Response(
-                status= STATUS_OK,
-                message= "Session created successfully.",
-                session= session_id,
+            status=STATUS_OK,
+            message="Session created successfully.",
+            session=session_id,
         )
 
     def _cmd_sessions_list(self, req: Request) -> Response:
         session_ids = self.sessions_storage.session_ids()
 
-        return Response(status= STATUS_OK, message= "", sessions= session_ids)
+        return Response(status=STATUS_OK, message="", sessions=session_ids)
 
     async def _cmd_sessions_destroy(self, req: Request) -> Response:
         session_id = req.session
@@ -309,7 +309,7 @@ class AsyncService(BaseService[Browser]):
         if not existed:
             raise Exception("The session doesn't exist.")
 
-        return Response(status= STATUS_OK, message= "The session has been removed.")
+        return Response(status=STATUS_OK, message="The session has been removed.")
 
     async def _resolve_challenge(self, req: Request, method: str) -> ChallengeResolutionT:
         timeout = req.max_timeout / 1000
@@ -344,7 +344,7 @@ class AsyncService(BaseService[Browser]):
 
     async def _evil_logic(self, req: Request, driver: Browser, method: str) -> ChallengeResolutionT:
         """Core logic for solving Cloudflare challenges with nodriver"""
-        res = ChallengeResolutionT(status = STATUS_OK,message = "")
+        res = ChallengeResolutionT(status=STATUS_OK, message="")
 
         # navigate to the page
         logger.debug(f"Navigating to... {req.url}")
@@ -510,7 +510,7 @@ class AsyncService(BaseService[Browser]):
             logger.info("Challenge not detected!")
             res.message = "Challenge not detected!"
 
-        challenge_res = ChallengeResolutionResultT(url = tab.target.url,status = STATUS_CODE)
+        challenge_res = ChallengeResolutionResultT(url=tab.target.url, status=STATUS_CODE)
         logger.debug("requesting cookies from the driver")
         challenge_res.cookies = await driver.cookies.get_all(requests_cookie_format=True)
         logger.debug("requesting user agent from the driver")

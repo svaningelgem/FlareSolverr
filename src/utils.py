@@ -18,7 +18,7 @@ from selenium.webdriver.chrome.webdriver import WebDriver
 
 import nodriver as nd
 import undetected_chromedriver as uc
-from src.dtos import Response, Request
+from src.dtos import Request, Response
 
 
 @lru_cache(1)
@@ -656,6 +656,7 @@ def format_html(input_html):
     return (
         f"\n==========================================\n{formatted_html}\n==========================================\n"
     )
+
 
 def dump(obj: Response | Request) -> None:
     """Dump the response object in debug mode"""
